@@ -99,7 +99,7 @@ def manual_guide():
     print("=" * 60)
     print("""
 方法1：从Web端界面查看
-  1. 登录 http://192.168.1.100/K3Cloud/
+  1. 登录金蝶K3Cloud系统
   2. 点击顶部菜单【系统管理】
   3. 选择【数据中心】或【查询用户】
   4. 在列表中查看"数据中心标识"列
@@ -122,8 +122,11 @@ def main():
     print("  金蝶数据中心ID检测工具")
     print("=" * 60)
 
-    # 配置（请根据实际情况修改）
-    server_url = "http://192.168.1.100/K3Cloud"
+    # 配置（请根据实际情况修改或使用环境变量）
+    server_url = input("请输入服务器地址（如 http://192.168.1.100/K3Cloud）：").strip()
+    if not server_url:
+        print("未输入服务器地址，退出")
+        return
     username = input("请输入用户名（直接回车使用Administrator）：").strip() or "Administrator"
 
     print(f"\n服务器地址: {server_url}")
