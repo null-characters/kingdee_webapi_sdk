@@ -128,8 +128,13 @@ class KingdeeClient:
                 body_str = json.dumps(data, ensure_ascii=False)
                 logger.debug(f"Body (repr): {repr(body_str)[:500]}...")
             
-            # 金蝶WebAPI使用JSON格式 - 手动序列化以确保中文字符正确处理
-            if isinstance(data, (dict, list)):
+            # 金蝶WebAPI序列化规则：
+            # - 单据操作接口(view/save/submit等): {"formId": "...", "data": {...}}
+            # - 查询接口: {"data": "jsonString"}
+            # - 登录接口: {"key": "value", ...}
+            if isinstance(data, dict):
+                request_body = json.dumps(data, ensure_ascii=False).encode('utf-8')
+            elif isinstance(data, list):
                 request_body = json.dumps(data, ensure_ascii=False).encode('utf-8')
             else:
                 request_body = data
@@ -262,36 +267,45 @@ class KingdeeClient:
         return True
     
     def view(self, form_id: str, data: Dict) -> Dict:
+        """查看单据详情"""
         self._check_login()
-        return self._request("view", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        # 金蝶实际 API 格式: {"formId": "...", "data": {...}}
+        return self._request("view", {"formId": form_id, "data": data})
+
     def save(self, form_id: str, data: Dict) -> Dict:
+        """保存单据（创建或修改）"""
         self._check_login()
-        return self._request("save", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        return self._request("save", {"formId": form_id, "data": data})
+
     def batch_save(self, form_id: str, data: Dict) -> Dict:
+        """批量保存单据"""
         self._check_login()
-        return self._request("batch_save", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        return self._request("batch_save", {"formId": form_id, "data": data})
+
     def draft(self, form_id: str, data: Dict) -> Dict:
+        """暂存单据"""
         self._check_login()
-        return self._request("draft", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        return self._request("draft", {"formId": form_id, "data": data})
+
     def submit(self, form_id: str, data: Dict) -> Dict:
+        """提交单据审批"""
         self._check_login()
-        return self._request("submit", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        return self._request("submit", {"formId": form_id, "data": data})
+
     def audit(self, form_id: str, data: Dict) -> Dict:
+        """审核单据"""
         self._check_login()
-        return self._request("audit", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        return self._request("audit", {"formId": form_id, "data": data})
+
     def unaudit(self, form_id: str, data: Dict) -> Dict:
+        """反审核单据"""
         self._check_login()
-        return self._request("unaudit", [form_id, json.dumps(data, ensure_ascii=False)])
-    
+        return self._request("unaudit", {"formId": form_id, "data": data})
+
     def delete(self, form_id: str, data: Dict) -> Dict:
+        """删除单据"""
         self._check_login()
-        return self._request("delete", [form_id, json.dumps(data, ensure_ascii=False)])
+        return self._request("delete", {"formId": form_id, "data": data})
     
     def execute_bill_query(
         self, form_id: str, field_keys: str,
