@@ -279,6 +279,150 @@ def delete_bill(form_id: str, numbers: str) -> Dict:
         raise
 
 
+@mcp.tool()
+def draft_bill(form_id: str, model_json: str) -> Dict:
+    """
+    暂存单据（草稿状态）
+    
+    Args:
+        form_id: 表单ID
+        model_json: 单据数据 JSON 字符串，包含 Model 结构
+    
+    Returns:
+        暂存结果
+    
+    Examples:
+        draft_bill("BD_MATERIAL", '{"Model": {"FNumber": "NEW001", "FName": "新物料"}}')
+    """
+    client = get_client()
+    try:
+        data = json.loads(model_json)
+        result = client.draft(form_id, data)
+        logger.info(f"暂存 {form_id} 成功")
+        return result
+    except Exception as e:
+        logger.error(f"暂存失败: {e}")
+        raise
+
+
+@mcp.tool()
+def batch_save_bill(form_id: str, models_json: str) -> Dict:
+    """
+    批量保存单据
+    
+    Args:
+        form_id: 表单ID
+        models_json: 单据数据列表 JSON，格式: [{"FNumber": "...", "FName": "..."}, ...]
+    
+    Returns:
+        批量保存结果
+    
+    Examples:
+        batch_save_bill("BD_MATERIAL", '[{"FNumber": "MAT001", "FName": "物料1"}, {"FNumber": "MAT002", "FName": "物料2"}]')
+    """
+    client = get_client()
+    try:
+        models = json.loads(models_json)
+        data = {
+            "Creator": client.username,
+            "NeedUpDateFields": [],
+            "BatchCount": str(len(models)),
+            "Model": models
+        }
+        result = client.batch_save(form_id, data)
+        logger.info(f"批量保存 {form_id} 成功，共 {len(models)} 条")
+        return result
+    except Exception as e:
+        logger.error(f"批量保存失败: {e}")
+        raise
+
+
+@mcp.tool()
+def unaudit_bill(form_id: str, numbers: str) -> Dict:
+    """
+    反审核单据
+    
+    Args:
+        form_id: 表单ID
+        numbers: 单据编号，多个用逗号分隔
+    
+    Returns:
+        反审核结果
+    
+    Examples:
+        unaudit_bill("BD_MATERIAL", "MAT001")
+    """
+    client = get_client()
+    try:
+        number_list = [n.strip() for n in numbers.split(",")]
+        data = {"Numbers": number_list}
+        result = client.unaudit(form_id, data)
+        logger.info(f"反审核 {form_id} 成功: {numbers}")
+        return result
+    except Exception as e:
+        logger.error(f"反审核失败: {e}")
+        raise
+
+
+@mcp.tool()
+def upload_attachment(
+    file_path: str,
+    form_id: Optional[str] = None,
+    bill_no: Optional[str] = None
+) -> Dict:
+    """
+    上传附件到金蝶系统
+    
+    Args:
+        file_path: 本地文件路径
+        form_id: 关联的表单ID（可选）
+        bill_no: 关联的单据编号（可选）
+    
+    Returns:
+        上传结果，包含附件ID
+    
+    Examples:
+        upload_attachment("/path/to/file.pdf", "BD_MATERIAL", "MAT001")
+    """
+    client = get_client()
+    try:
+        result = client.upload_attachment(
+            file_path=file_path,
+            form_id=form_id,
+            bill_no=bill_no
+        )
+        logger.info(f"上传附件成功: {file_path}")
+        return result
+    except Exception as e:
+        logger.error(f"上传附件失败: {e}")
+        raise
+
+
+@mcp.tool()
+def download_attachment(attachment_id: str, save_path: Optional[str] = None) -> str:
+    """
+    下载附件
+    
+    Args:
+        attachment_id: 附件ID
+        save_path: 保存路径（可选，默认使用附件原名）
+    
+    Returns:
+        保存的文件路径
+    
+    Examples:
+        download_attachment("ATT001", "/path/to/save.pdf")
+    """
+    client = get_client()
+    try:
+        result = client.download_attachment(attachment_id, save_path)
+        logger.info(f"下载附件成功: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"下载附件失败: {e}")
+        raise
+
+
 # ==================== PLM 物料管理工具 ====================
 
 @mcp.tool()
@@ -380,6 +524,31 @@ def create_material(
         raise
 
 
+@mcp.tool()
+def batch_create_materials(materials_json: str) -> Dict:
+    """
+    批量创建物料
+    
+    Args:
+        materials_json: 物料列表 JSON，格式: [{"material_code": "...", "material_name": "...", "specification": "...", "material_group": "...", "unit": "..."}, ...]
+    
+    Returns:
+        批量创建结果
+    
+    Examples:
+        batch_create_materials('[{"material_code": "MAT001", "material_name": "物料1"}, {"material_code": "MAT002", "material_name": "物料2"}]')
+    """
+    plm = get_plm_tools()
+    try:
+        materials = json.loads(materials_json)
+        result = plm.batch_create_materials(materials)
+        logger.info(f"批量创建物料成功，共 {len(materials)} 条")
+        return result
+    except Exception as e:
+        logger.error(f"批量创建物料失败: {e}")
+        raise
+
+
 # ==================== PLM BOM 管理工具 ====================
 
 @mcp.tool()
@@ -445,6 +614,31 @@ def create_bom(
         return result
     except Exception as e:
         logger.error(f"创建 BOM 失败: {e}")
+        raise
+
+
+@mcp.tool()
+def batch_create_boms(boms_json: str) -> Dict:
+    """
+    批量创建 BOM
+    
+    Args:
+        boms_json: BOM 列表 JSON，格式: [{"bom_no": "...", "parent_material_code": "...", "items": [...], "version": "..."}, ...]
+    
+    Returns:
+        批量创建结果
+    
+    Examples:
+        batch_create_boms('[{"bom_no": "BOM001", "parent_material_code": "P001", "items": [{"material_code": "A001", "qty": 1}]}]')
+    """
+    plm = get_plm_tools()
+    try:
+        boms = json.loads(boms_json)
+        result = plm.batch_create_boms(boms)
+        logger.info(f"批量创建 BOM 成功，共 {len(boms)} 条")
+        return result
+    except Exception as e:
+        logger.error(f"批量创建 BOM 失败: {e}")
         raise
 
 
@@ -522,6 +716,105 @@ def reject_eco(bill_no: str) -> Dict:
         raise
 
 
+# ==================== PLM 图纸管理工具 ====================
+
+@mcp.tool()
+def upload_drawing(
+    file_path: str,
+    material_code: Optional[str] = None,
+    version: str = "V1.0",
+    description: Optional[str] = None
+) -> Dict:
+    """
+    上传图纸并关联物料
+    
+    Args:
+        file_path: 本地图纸文件路径
+        material_code: 关联的物料编码（可选）
+        version: 图纸版本，默认 V1.0
+        description: 图纸描述（可选）
+    
+    Returns:
+        上传结果，包含附件ID和图纸信息
+    
+    Examples:
+        upload_drawing("/path/to/drawing.pdf", "MAT001", "V1.0", "产品图纸")
+    """
+    plm = get_plm_tools()
+    try:
+        result = plm.upload_drawing(
+            file_path=file_path,
+            material_code=material_code,
+            version=version,
+            description=description
+        )
+        logger.info(f"上传图纸成功: {file_path}")
+        return result
+    except Exception as e:
+        logger.error(f"上传图纸失败: {e}")
+        raise
+
+
+@mcp.tool()
+def download_drawing(attachment_id: str, save_dir: str = ".") -> str:
+    """
+    下载图纸
+    
+    Args:
+        attachment_id: 附件ID
+        save_dir: 保存目录，默认当前目录
+    
+    Returns:
+        保存的文件路径
+    
+    Examples:
+        download_drawing("ATT001", "/path/to/save")
+    """
+    plm = get_plm_tools()
+    try:
+        result = plm.download_drawing(attachment_id, save_dir)
+        logger.info(f"下载图纸成功: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"下载图纸失败: {e}")
+        raise
+
+
+@mcp.tool()
+def search_drawings(
+    material_code: Optional[str] = None,
+    doc_name: Optional[str] = None,
+    limit: int = 50
+) -> List[List[Any]]:
+    """
+    搜索图纸
+    
+    Args:
+        material_code: 物料编码（可选）
+        doc_name: 图纸名称关键词（可选）
+        limit: 返回数量限制
+    
+    Returns:
+        图纸列表，包含图纸ID、编号、名称、版本、关联物料、文件名、附件ID、创建日期等
+    
+    Examples:
+        search_drawings(material_code="MAT001")
+        search_drawings(doc_name="装配图")
+    """
+    plm = get_plm_tools()
+    try:
+        result = plm.query_drawings(
+            material_code=material_code,
+            doc_name=doc_name,
+            limit=limit
+        )
+        logger.info(f"搜索图纸成功，返回 {len(result)} 条")
+        return result
+    except Exception as e:
+        logger.error(f"搜索图纸失败: {e}")
+        raise
+
+
 # ==================== 辅助资源 ====================
 
 @mcp.resource("kingdee://form-ids")
@@ -542,36 +835,70 @@ def get_form_ids() -> str:
 | 员工 | BD_STAFF |
 | 币别 | BD_CURRENCY |
 | 计量单位 | BD_UNIT |
+| 辅助属性 | BD_FLEXSITEMDETAILV |
+| 组织机构 | ORG_Organizations |
 
 ## 销售管理
 | 名称 | FormId |
 |------|--------|
+| 销售报价单 | SAL_QUOTATION |
 | 销售订单 | SAL_SaleOrder |
 | 销售出库单 | SAL_OUTSTOCK |
+| 销售退货单 | SAL_RETURNSTOCK |
 
 ## 采购管理
 | 名称 | FormId |
 |------|--------|
+| 采购申请单 | PUR_ReqBill |
 | 采购订单 | PUR_PurchaseOrder |
 | 采购入库单 | STK_InStock |
+| 采购退货单 | PUR_MRB |
 
 ## 库存管理
 | 名称 | FormId |
 |------|--------|
 | 直接调拨单 | STK_TRANSFER |
+| 分布式调拨单 | STK_STKTRANSFEROUT |
 | 盘点单 | STK_StockCount |
+| 组装单 | STK_AssembleApp |
+| 拆卸单 | STK_DisAssembleApp |
+| 即时库存 | STK_Inventory |
 
 ## 生产管理
 | 名称 | FormId |
 |------|--------|
 | 生产订单 | PRD_MO |
+| 生产领料单 | PRD_PickMtrl |
+| 生产入库单 | PRD_INSTOCK |
 | BOM | ENG_BOM |
+| BOM版本 | ENG_BOMVERSION |
+| 工艺路线 | ENG_ROUTE |
 
 ## PLM 模块
 | 名称 | FormId |
 |------|--------|
 | 工程变更单 | ENG_ECO |
+| 工程变更建议 | ENG_ECN |
 | 图纸管理 | PLM_DRAWING |
+| 文档管理 | PLM_DOC |
+| 项目管理 | PLM_PROJECT |
+| 任务管理 | PLM_TASK |
+
+## 财务管理
+| 名称 | FormId |
+|------|--------|
+| 科目 | BD_ACCOUNT |
+| 凭证 | GL_VOUCHER |
+| 收款单 | AR_RECEIVEBILL |
+| 付款单 | AP_PAYBILL |
+
+## 应收应付
+| 名称 | FormId |
+|------|--------|
+| 应收单 | AR_receivable |
+| 应付单 | AP_payable |
+| 其他应收单 | AR_OtherRecAble |
+| 其他应付单 | AP_OtherPayAble |
 """
     return form_ids
 

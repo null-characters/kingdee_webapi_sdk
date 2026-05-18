@@ -173,22 +173,53 @@ python agent.py -q "查询前5个物料"
 
 ## MCP 工具列表
 
+### 通用单据操作
 | 工具名 | 功能 | 说明 |
 |-------|------|------|
 | `query_bill` | 通用单据查询 | 支持任意表单查询 |
 | `view_bill` | 查看单据详情 | 查看单据完整信息 |
 | `save_bill` | 创建/修改单据 | 保存单据数据 |
+| `draft_bill` | 暂存单据 | 保存为草稿状态 |
+| `batch_save_bill` | 批量保存单据 | 批量创建/修改 |
 | `submit_bill` | 提交审批 | 提交单据审批流程 |
 | `audit_bill` | 审核单据 | 审核通过单据 |
+| `unaudit_bill` | 反审核单据 | 撤销审核状态 |
 | `delete_bill` | 删除单据 | 删除未审核单据 |
+
+### 附件管理
+| 工具名 | 功能 | 说明 |
+|-------|------|------|
+| `upload_attachment` | 上传附件 | 上传文件到金蝶系统 |
+| `download_attachment` | 下载附件 | 下载附件到本地 |
+
+### PLM 物料管理
+| 工具名 | 功能 | 说明 |
+|-------|------|------|
 | `search_materials` | 搜索物料 | 模糊搜索物料 |
 | `get_material_detail` | 物料详情 | 查看物料完整信息 |
 | `create_material` | 创建物料 | 新建物料主数据 |
+| `batch_create_materials` | 批量创建物料 | 批量新建物料 |
+
+### PLM BOM 管理
+| 工具名 | 功能 | 说明 |
+|-------|------|------|
 | `get_bom` | 获取 BOM | 查看物料 BOM 结构 |
 | `create_bom` | 创建 BOM | 新建 BOM 关系 |
+| `batch_create_boms` | 批量创建 BOM | 批量新建 BOM |
+
+### PLM 变更管理
+| 工具名 | 功能 | 说明 |
+|-------|------|------|
 | `get_pending_ecos` | 待审批变更单 | 查询待审批 ECO |
 | `approve_eco` | 审批变更单 | 审批通过 ECO |
 | `reject_eco` | 驳回变更单 | 驳回 ECO |
+
+### PLM 图纸管理
+| 工具名 | 功能 | 说明 |
+|-------|------|------|
+| `upload_drawing` | 上传图纸 | 上传图纸并关联物料 |
+| `download_drawing` | 下载图纸 | 下载图纸文件 |
+| `search_drawings` | 搜索图纸 | 按物料或名称搜索 |
 
 ## 认证方式
 

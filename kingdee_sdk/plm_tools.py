@@ -71,7 +71,8 @@ class PLMTools:
         start_row: int = 0
     ) -> List[List[Any]]:
         """模糊搜索物料"""
-        fields = "FMaterialId,FNumber,FName,FSpecification,FMaterialGroup.FNumber,FUnitID.FNumber,FGrossWeight,FNetWeight,FCreatorId.FName,FCreateDate,FDocumentStatus"
+        # 常用字段，避免使用可能不存在的字段
+        fields = "FMaterialId,FNumber,FName,FSpecification,FMaterialGroup.FNumber,FGrossWeight,FNetWeight,FCreatorId.FName,FCreateDate,FDocumentStatus"
         
         filters = []
         if keyword:
@@ -246,16 +247,26 @@ class PLMTools:
     # ==================== 变更单操作 ====================
     
     def get_pending_ecos(self, limit: int = 100) -> List[List[Any]]:
-        """获取待审批的工程变更单"""
+        """获取待审批的工程变更单
+        
+        注意：如果账套未安装 PLM 模块，ENG_ECO 业务对象可能不存在
+        """
         fields = "FBillNo,FBillType,FCreateDate,FCreatorId.FName,FBillStatus,FDescription"
         filter_str = "FBillStatus = 'A'"
         
-        return self.client.execute_bill_query(
-            form_id=self.form_ids.ECO,
-            field_keys=fields,
-            filter_string=filter_str,
-            limit=limit
-        )
+        try:
+            return self.client.execute_bill_query(
+                form_id=self.form_ids.ECO,
+                field_keys=fields,
+                filter_string=filter_str,
+                limit=limit
+            )
+        except KingdeeAPIError as e:
+            # 如果业务对象不存在，返回空列表而不是报错
+            if "业务对象不存在" in str(e):
+                logger.warning(f"ENG_ECO 业务对象不存在，可能未安装 PLM 模块")
+                return []
+            raise
     
     def get_eco_detail(self, bill_no: str) -> Optional[Dict]:
         """获取变更单详情"""
@@ -372,7 +383,10 @@ class PLMTools:
         doc_name: Optional[str] = None,
         limit: int = 100
     ) -> List[List[Any]]:
-        """查询图纸"""
+        """查询图纸
+        
+        注意：如果账套未安装 PLM 模块，PLM_DRAWING 业务对象可能不存在
+        """
         fields = "FDocId,FDocNo,FDocName,FVersion,FMaterialID.FNumber,FFileName,FAttachmentID,FCreateDate"
         
         filters = []
@@ -383,12 +397,18 @@ class PLMTools:
         
         filter_string = " and ".join(filters) if filters else None
         
-        return self.client.execute_bill_query(
-            form_id=self.form_ids.DRAWING,
-            field_keys=fields,
-            filter_string=filter_string,
-            limit=limit
-        )
+        try:
+            return self.client.execute_bill_query(
+                form_id=self.form_ids.DRAWING,
+                field_keys=fields,
+                filter_string=filter_string,
+                limit=limit
+            )
+        except KingdeeAPIError as e:
+            if "业务对象不存在" in str(e):
+                logger.warning(f"PLM_DRAWING 业务对象不存在，可能未安装 PLM 模块")
+                return []
+            raise
     
     # ==================== 辅助方法 ====================
     

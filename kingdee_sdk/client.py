@@ -328,6 +328,9 @@ class KingdeeClient:
             
         Returns:
             二维列表，每行是一条记录，每列是一个字段值
+            
+        Raises:
+            KingdeeAPIError: 当查询失败时（字段不存在、表单不存在等）
         """
         self._check_login()
         
@@ -348,7 +351,21 @@ class KingdeeClient:
         inner_json = json.dumps(query_params, ensure_ascii=False)
         request_data = {"data": inner_json}
         
-        return self._request("execute_bill_query", request_data)
+        result = self._request("execute_bill_query", request_data)
+        
+        # 检查结果中是否包含错误信息
+        # 金蝶查询接口有时返回 [{}] 格式的错误，而不是抛异常
+        if isinstance(result, list) and len(result) > 0:
+            first_item = result[0]
+            if isinstance(first_item, dict) and 'Result' in first_item:
+                response_status = first_item.get('Result', {}).get('ResponseStatus', {})
+                if response_status.get('IsSuccess') == False:
+                    errors = response_status.get('Errors', [])
+                    if errors:
+                        error_msg = errors[0].get('Message', '查询失败')
+                        raise KingdeeAPIError(error_msg, response_data=first_item)
+        
+        return result
     
     def upload_attachment(
         self,
