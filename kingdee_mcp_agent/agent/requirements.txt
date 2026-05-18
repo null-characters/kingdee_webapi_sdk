@@ -1,0 +1,5 @@
+# Agent 依赖
+
+openai>=1.0.0
+mcp>=1.0.0
+python-dotenv>=1.0.0
