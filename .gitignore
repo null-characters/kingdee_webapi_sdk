@@ -45,6 +45,12 @@ htmlcov/
 
 # Local config (sensitive data)
 kingdee_sdk/config.py
+kingdee_mcp_agent/config/settings.py
+
+# Environment files (may contain secrets)
+.env
+.env.local
+.env.*.local
 
 # OS
 .DS_Store
@@ -54,5 +60,12 @@ Thumbs.db
 *.tmp
 *.bak
 
-# Test scripts (contain sensitive data)
+# Test scripts (may contain sensitive data)
 test_*.py
+
+# Logs
+logs/
+*.log
+
+# WorkBuddy data (private)
+.workbuddy/
