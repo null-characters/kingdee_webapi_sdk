@@ -41,16 +41,35 @@ _plm_tools: Optional[PLMTools] = None
 def get_client() -> KingdeeClient:
     """获取或创建金蝶客户端实例"""
     global _client, _plm_tools
-    
+
     if _client is None:
-        # 从环境变量读取配置（不使用硬编码默认值）
-        server_url = os.getenv("KINGDEE_SERVER_URL", "")
-        acct_id = os.getenv("KINGDEE_ACCT_ID", "")
-        username = os.getenv("KINGDEE_USERNAME", "")
-        password = os.getenv("KINGDEE_PASSWORD", "")
+        # 优先从环境变量读取，其次从 settings.py 读取
+        server_url = os.getenv("KINGDEE_SERVER_URL")
+        acct_id = os.getenv("KINGDEE_ACCT_ID")
+        username = os.getenv("KINGDEE_USERNAME")
+        password = os.getenv("KINGDEE_PASSWORD")
+
+        # 如果环境变量未设置，尝试从 settings.py 读取
+        if not all([server_url, acct_id, username, password]):
+            try:
+                # 添加 config 目录到路径
+                config_dir = str(Path(__file__).parent.parent / "config")
+                if config_dir not in sys.path:
+                    sys.path.insert(0, config_dir)
+                from settings import KINGDEE_CONFIG
+                server_url = server_url or KINGDEE_CONFIG.get("server_url")
+                acct_id = acct_id or KINGDEE_CONFIG.get("acct_id")
+                username = username or KINGDEE_CONFIG.get("username")
+                password = password or KINGDEE_CONFIG.get("password")
+            except ImportError:
+                pass
 
         if not all([server_url, acct_id, username, password]):
-            raise ValueError("请设置环境变量: KINGDEE_SERVER_URL, KINGDEE_ACCT_ID, KINGDEE_USERNAME, KINGDEE_PASSWORD")
+            raise ValueError(
+                "请配置金蝶连接信息（任选其一）：\n"
+                "1. 设置环境变量: KINGDEE_SERVER_URL, KINGDEE_ACCT_ID, KINGDEE_USERNAME, KINGDEE_PASSWORD\n"
+                "2. 创建 config/settings.py 并配置 KINGDEE_CONFIG"
+            )
         
         _client = KingdeeClient(
             server_url=server_url,
