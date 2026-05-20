@@ -34,7 +34,7 @@ kingdee_webapi_sdk/
 │   ├── config.py             # 配置文件（需自行创建）
 │   └── config.example.py     # 配置示例
 │
-├── kingdee_mcp_agent/        # MCP Agent（新增）
+├── kingdee_mcp_agent/        # MCP Agent
 │   ├── mcp_server/           # MCP Server
 │   │   ├── server.py         # 14 个金蝶工具
 │   │   └── requirements.txt
@@ -46,10 +46,31 @@ kingdee_webapi_sdk/
 │   │   └── settings.example.py
 │   └── README.md
 │
-├── demo.py                   # SDK 功能演示
-├── example.py                # PLM 完整示例
-├── material_query.py         # 物料查询工具
-├── detect_acct_id.py         # ID检测工具
+├── docs/                     # 文档目录
+│   ├── guides/               # 使用指南
+│   │   ├── 快速开始.md
+│   │   ├── 使用指南.md
+│   │   └── AGENT_GUIDE.md
+│   └── reference/            # 参考资料
+│       ├── 金蝶云API探索记录.md
+│       ├── all_bill_types.json
+│       └── bill_types_list.txt
+│
+├── examples/                 # 示例脚本
+│   ├── demo.py               # SDK 功能演示
+│   ├── example.py            # PLM 完整示例
+│   ├── material_query.py     # 物料查询工具
+│   └── view_material_full.py # 物料详情查看
+│
+├── scripts/                  # 业务脚本
+│   ├── detect_acct_id.py     # ID检测工具
+│   ├── extract_submitted_items.py
+│   └── verify_material_codes.py
+│
+├── tests/                    # 测试脚本
+│   ├── test_sdk_full.py
+│   └── test_sdk_functions.py
+│
 ├── requirements.txt          # SDK 依赖
 └── README.md                 # 本文档
 ```
@@ -265,24 +286,32 @@ client = KingdeeClient(
 
 ## 工具程序
 
-### 物料查询控制台
+### 示例脚本 (examples/)
+
+| 脚本 | 说明 |
+|------|------|
+| `demo.py` | SDK 功能演示 |
+| `example.py` | PLM 完整示例 |
+| `material_query.py` | 交互式物料查询工具 |
+| `view_material_full.py` | 物料详情查看 |
+
+### 业务脚本 (scripts/)
+
+| 脚本 | 说明 |
+|------|------|
+| `detect_acct_id.py` | 自动检测可用的数据中心ID |
+| `extract_submitted_items.py` | 提取已提交项目清单 |
+| `verify_material_codes.py` | 子物料编码校验 |
+
+运行示例：
 
 ```bash
-python material_query.py
+# 物料查询
+python examples/material_query.py
+
+# ID检测
+python scripts/detect_acct_id.py
 ```
-
-交互式物料查询工具，支持：
-- 查询所有物料
-- 按编号精确查询
-- 按名称模糊查询
-
-### 数据中心ID检测
-
-```bash
-python detect_acct_id.py
-```
-
-自动检测可用的数据中心ID（acct_id）。
 
 ## 注意事项
 
@@ -296,6 +325,9 @@ python detect_acct_id.py
 
 - [金蝶云星空 WebAPI 接口说明书](./kingdee_sdk/api文档.md)
 - [MCP Agent 详细说明](./kingdee_mcp_agent/README.md)
+- [快速开始](./docs/guides/快速开始.md)
+- [使用指南](./docs/guides/使用指南.md)
+- [API 探索记录](./docs/reference/金蝶云API探索记录.md)
 - [金蝶官方文档](https://help.kingdee.com/)
 
 ## License
