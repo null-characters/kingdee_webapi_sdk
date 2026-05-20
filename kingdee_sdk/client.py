@@ -462,33 +462,51 @@ class KingdeeClient:
     
     def download_attachment(
         self,
-        attachment_id: str,
-        save_path: Optional[str] = None
+        file_id: str,
+        save_path: Optional[str] = None,
+        start_index: int = 0
     ) -> str:
         """
         下载附件
         
         Args:
-            attachment_id: 附件ID
+            file_id: 文件ID（从 BOS_Attachment 表的 FInterID 字段获取，格式如 Temp_xxx-xxx）
             save_path: 保存路径，默认使用附件原名
+            start_index: 下载起始位置，默认为0
             
         Returns:
             保存的文件路径
         """
         self._check_login()
         
-        data = {"AttachmentId": attachment_id}
+        import base64
+        
+        # 金蝶附件下载接口参数格式
+        # FileId 格式: Temp_xxx-xxx-xxx 或纯 UUID
+        param_str = '{"FileId":"' + str(file_id) + '","StartIndex":' + str(start_index) + '}'
+        data = {"data": param_str}
         result = self._request("attachment_download", data)
         
         # 解析返回的文件内容
-        file_content = result.get("FileContent", "")
-        file_name = result.get("FileName", f"attachment_{attachment_id}")
+        result_data = result.get("Result", result)
+        file_part = result_data.get("FilePart", "")
+        file_name = result_data.get("FileName", f"attachment_{file_id}")
+        is_last = result_data.get("IsLast", True)
         
         if not save_path:
             save_path = file_name
         
-        # 保存文件
-        with open(save_path, 'wb') as f:
-            f.write(bytes.fromhex(file_content) if isinstance(file_content, str) else file_content)
+        # Base64解码并保存文件
+        file_bytes = base64.b64decode(file_part) if file_part else b''
+        
+        # 如果不是最后一次，需要追加写入
+        mode = 'wb' if start_index == 0 else 'ab'
+        with open(save_path, mode) as f:
+            f.write(file_bytes)
+        
+        # 如果文件较大需要分块下载
+        if not is_last:
+            next_index = result_data.get("StartIndex", start_index + len(file_bytes))
+            return self.download_attachment(file_id, save_path, next_index)
         
         return save_path
