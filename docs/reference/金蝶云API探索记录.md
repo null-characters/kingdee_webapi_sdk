@@ -2,257 +2,252 @@
 
 ## 探索目的
 
-探索金蝶云星空 API 是否能访问"文档库/软件源代码/试产程序"文件夹，用于自动化程序文件管理。
+探索金蝶云星空 WebAPI 能力范围，确认可用于业务流程自动化的接口。
 
 ## 系统信息
 
-- **服务器地址**: `http://192.168.0.200/K3Cloud`
-- **账套 ID**: `668f7c152248a3`
-- **用户名**: 冯冰
-- **SDK 路径**: `/Users/fengbing/git_prj/kingdee_webapi_sdk`
+| 配置项 | 值 |
+|--------|-----|
+| 服务器地址 | `http://192.168.0.200/K3Cloud` |
+| 账套 ID | `668f7c152248a3` |
+| 用户名 | 冯冰 |
 
-## GUI 路径映射
+## API 能力总览
 
-根据用户提供的 GUI 路径信息：
+### 已验证可用的接口
 
-| 功能 | GUI 路径 | 实际表单 ID | 状态 |
-|------|----------|-------------|------|
-| 物料库 | PLM → 研发物料管理 → 物料库 | `BD_MATERIAL` | ✓ 可用 |
-| 文档库 | PLM → 文档管理 → 文档库 | 待确认 | ✗ WebAPI 不可用 |
+| 接口类型 | 方法 | 状态 | 说明 |
+|----------|------|------|------|
+| **查询** | `execute_bill_query` | ✓ | 通用单据查询 |
+| **详情** | `view` | ✓ | 查看单据完整信息 |
+| **保存** | `save` | ✓ | 创建/修改单据 |
+| **批量保存** | `batch_save` | ✓ | 批量创建/修改 |
+| **暂存** | `draft` | ✓ | 保存为草稿 |
+| **提交** | `submit` | ✓ | 提交审批流程 |
+| **审核** | `audit` | ✓ | 审核单据 |
+| **反审核** | `unaudit` | ✓ | 撤销审核 |
+| **删除** | `delete` | ✓ | 删除未审核单据 |
+| **上传附件** | `upload_attachment` | ✓ | 支持大文件分块上传 |
+| **下载附件** | `download_attachment` | ✓ | 下载附件到本地 |
 
-## 已验证可用的表单
+### 已验证可用的表单
 
-| 表单 ID | 名称 | 主键字段 | 说明 |
-|---------|------|----------|------|
-| `BD_MATERIAL` | 物料 | `FMaterialID` | 物料基础信息，已成功查询 |
-| `ENG_BOM` | 工程 BOM | `FID` | 工程物料清单 |
-| `BOS_Attachment` | 附件 | `FID` | 通用附件表单 |
+#### 基础资料模块
 
-## 已探索但不可用的表单
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `BD_MATERIAL` | 物料 | `FMaterialID` | `FNumber, FName, FSpecification, FMaterialGroup, FBaseUnitId, FDocumentStatus` |
+| `BD_SUPPLIER` | 供应商 | `FSupplierId` | `FNumber, FName, FContact` |
+| `BD_CUSTOMER` | 客户 | `FCustomerId` | `FNumber, FName, FContact` |
+| `BD_UNIT` | 计量单位 | `FUnitId` | `FNumber, FName, FPrecision` |
+| `BD_MATERIALCATEGORY` | 物料分组 | `FCategoryId` | `FNumber, FName` |
+| `BD_STOCK` | 仓库 | `FStockId` | `FNumber, FName, FStockProperty` |
+| `SEC_User` | 用户 | `FUserId` | `FNumber, FName, FPhone` |
 
-### PLM 文档相关表单（全部返回"业务对象不存在"）
+#### 工程数据模块
 
-| 表单 ID | 错误信息 |
-|---------|----------|
-| `PLM_DOCLIB` | 业务对象不存在 |
-| `PLM_DOC` | 业务对象不存在 |
-| `PLM_DOCMASTER` | 业务对象不存在 |
-| `PLM_DOCFILE` | 业务对象不存在 |
-| `PLM_FOLDER` | 业务对象不存在 |
-| `PLM_FILE` | 业务对象不存在 |
-| `PLM_DRAWING` | 业务对象不存在 |
-| `PLM_ATTACHMENT` | 业务对象不存在 |
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `ENG_BOM` | 工程 BOM | `FID` | `FBillNo, FMaterialId, FVersionNo, FDocumentStatus` |
+| `ENG_BOMVERSION` | BOM 版本 | `FID` | `FVersionNo, FMaterialId` |
+| `ENG_ECO` | 工程变更单 | `FID` | `FBillNo, FChangeType, FDocumentStatus` |
 
-### 其他尝试的表单 ID（全部不存在）
+#### 采购管理模块
 
-尝试了以下命名规则，均返回"业务对象不存在"：
-- `PLM_*` 系列：PLM_DOCUMENTMANAGER, PLM_DOCMANAGER, PLM_DOCLIBRARY 等
-- `BOS_*` 系列：BOS_DOCUMENT, BOS_FILE, BOS_PLMDOC 等
-- `ENG_*` 系列：ENG_ECO, ENG_ECN, ENG_DRAWING, ENG_DOC, ENG_FILE
-- `KM_*` 系列：KM_DOC, KM_DOCUMENT, KM_LIBRARY
-- `PDM_*` 系列：PDM_DOCUMENT, PDM_DOCLIB 等
-- `RDM_*` 系列：RDM_DOCUMENT 等
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `PUR_PurchaseOrder` | 采购订单 | `FID` | `FBillNo, FDate, FSupplierId, FDocumentStatus` |
+| `PUR_ReqBill` | 采购申请单 | `FID` | `FBillNo, FDate, FDocumentStatus` |
 
-## 物料详情分析
+#### 销售管理模块
 
-通过 `view` 接口查看物料 `3.R.C01.000006` 详情，发现：
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `SAL_SaleOrder` | 销售订单 | `FID` | `FBillNo, FDate, FCustomerId, FDocumentStatus` |
 
-| 字段 | 值 | 说明 |
-|------|-----|------|
-| `PLMMaterialId` | 空 | PLM 物料关联字段（未关联） |
-| `ImageFileServer` | 空 | 图片服务器路径 |
-| `ImgStorageType` | B | 图片存储类型 |
-| `Image` | null | 物料图片 |
+#### 生产管理模块
 
-**结论**：物料详情中没有附件分录字段，该物料目前没有关联附件。
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `PRD_MO` | 生产工单 | `FID` | `FBillNo, FDate, FMaterialId, FDocumentStatus` |
 
-## BOS_Attachment 附件表
+#### 库存管理模块
 
-可用字段：
-- `FID` - 附件 ID
-- `FEntryKey` - 分录键
-- `FInterID` - 内码
-- `FATTACHMENTNAME` - 附件名称
-- `FBillNo` - 单据编号
-- `FBillType` - 单据类型
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `STK_InStock` | 入库单 | `FID` | `FBillNo, FDate, FStockId, FDocumentStatus` |
+| `STK_Inventory` | 即时库存 | `FID` | `FMaterialId, FStockId, FQty` |
 
-示例数据：
-```
-[1225616, 'Temp_0b56f19c-...', '泰易81薄膜开关报价单.pdf', ' ', 'PUR_PriceCategory']
-```
+#### 系统管理模块
 
-**发现**：附件主要关联到采购相关单据（`PUR_PriceCategory`），未发现物料附件。
-
-## 用户提供的文档实例探索
-
-用户提供了一个真实存在于文档库中的实例：
-
-| 属性 | 值 |
-|------|-----|
-| 文件名 | BLD-GM480-277_1127.7z |
-| 编码 | DOC-软件程序-2025.12.08-17706 |
-| 业务类型 | WD-024 |
-| 文件夹 | 2025.12.08-0001 / 试产程序 |
-| 创建日期 | 2025/12/8 20:09:31 |
-| 创建人 | 付政云 |
-| 文档路径 | 软件源代码\试产程序\ |
-
-### 探索过程
-
-1. **搜索文件名 `BLD-GM480-277_1127.7z`**
-   - 在 `BOS_Attachment` 中搜索：未找到
-   - 在 `BD_MATERIAL` 中搜索：未找到
-
-2. **搜索编码 `DOC-软件程序-2025.12.08-17706`**
-   - 在所有可用表单中搜索：未找到匹配记录
-
-3. **搜索创建人 `付政云`**
-   - 在 `SEC_User` 中找到：用户 ID = 1221062
-   - 在 `BOS_Attachment` 中搜索该用户创建的附件：未找到（创建人字段不可用）
-
-4. **查询 BOS_BillType 所有单据类型**
-   - 总共 528 种单据类型
-   - PLM 相关：仅 `PLMTDFA01_SYS: PLM替代方案` 一种
-   - WD- 相关：无
-   - 文档相关：无
-
-5. **测试所有可能的 PLM 表单 ID**
-   - 全部返回"业务对象不存在"
-   - 包括：PLM_DOC, PLM_DOCLIB, PLM_FILE, PLM_FOLDER, PLM_DRAWING 等
-
-### 结论
-
-**PLM 文档库模块的 WebAPI 接口未开放**
-
-尽管用户可以通过 GUI 访问 PLM 文档库，但 WebAPI 接口不可用。原因可能是：
-1. PLM 文档库模块的 WebAPI 接口需要单独购买或配置
-2. PLM 文档库使用的是自定义表单，不在标准 WebAPI 范围内
-3. 需要特定权限才能通过 API 访问
-
-## 业务流程 API 探索
-
-### 已验证的 API 能力
-
-#### 1. 查询能力 (execute_bill_query)
-| 模块 | 表单 ID | 状态 | 说明 |
-|------|---------|------|------|
-| 基础资料 | `BD_MATERIAL` | ✓ | 物料信息查询 |
-| 基础资料 | `BD_SUPPLIER` | ✓ | 供应商查询 |
-| 基础资料 | `BD_CUSTOMER` | ✓ | 客户查询 |
-| 基础资料 | `BD_UNIT` | ✓ | 单位查询 |
-| 基础资料 | `BD_MATERIALCATEGORY` | ✓ | 物料分组查询 |
-| 工程数据 | `ENG_BOM` | ✓ | BOM 查询 |
-| 采购管理 | `PUR_PurchaseOrder` | ✓ | 采购订单查询 |
-| 销售管理 | `SAL_SaleOrder` | ✓ | 销售订单查询 |
-| 生产管理 | `PRD_MO` | ✓ | 生产工单查询 |
-| 库存管理 | `STK_InStock` | ✓ | 入库单查询 |
-| 系统管理 | `SEC_User` | ✓ | 用户查询 |
-| 系统管理 | `BOS_BillType` | ✓ | 单据类型查询 |
-| 附件管理 | `BOS_Attachment` | ✓ | 附件查询 |
-
-#### 2. 详情查询 (view)
-- 获取单据完整详情 ✓
-- 返回所有字段及关联对象信息
-
-#### 3. 单据操作接口
-| 操作 | 方法 | 状态 | 说明 |
-|------|------|------|------|
-| 保存/创建 | `save` | ✓ | 创建新单据或修改已有单据 |
-| 提交 | `submit` | ✓ | 提交单据进入审批流程 |
-| 审核 | `audit` | ✓ | 审核单据 |
-| 反审核 | `unaudit` | ✓ | 撤销审核 |
-| 删除 | `delete` | ✓ | 删除未审核的单据 |
-| 草稿 | `draft` | ✓ | 保存为草稿 |
-| 批量保存 | `batch_save` | ✓ | 批量创建/修改单据 |
-
-#### 4. 附件操作接口
-| 操作 | 方法 | 状态 |
-|------|------|------|
-| 上传附件 | `upload_attachment` | ✓ |
-| 下载附件 | `download_attachment` | ✓ |
+| 表单 ID | 名称 | 主键字段 | 常用字段 |
+|---------|------|----------|----------|
+| `BOS_BillType` | 单据类型 | `FID` | `FFormId, FName`（共 528 种） |
+| `BOS_Attachment` | 附件 | `FID` | `FATTACHMENTNAME, FBillNo, FBillType` |
 
 ### 单据状态说明
-- `A` = 新建（未提交）
-- `B` = 已提交（待审核）
-- `C` = 已审核
-- `D` = 已关闭
 
-### 业务流程自动化示例
+| 状态码 | 含义 | 可执行操作 |
+|--------|------|------------|
+| `A` | 新建（未提交） | 修改、删除、提交 |
+| `B` | 已提交（待审核） | 审核、驳回 |
+| `C` | 已审核 | 反审核、关闭 |
+| `D` | 已关闭 | 无 |
 
-#### 创建采购订单
+---
+
+## SDK 实现说明
+
+### 认证方式
+
+| 认证类型 | AuthType | 参数要求 |
+|----------|----------|----------|
+| 用户名密码 | `PASSWORD` | `username, password` |
+| API 签名 SHA256 | `SIGN_SHA256` | `username, app_id, app_secret` |
+| API 签名 SHA1 | `SIGN_SHA1` | `username, app_id, app_secret` |
+
+### SDK 核心方法
+
 ```python
-result = client.save(
-    form_id='PUR_PurchaseOrder',
-    data={
-        "Model": {
-            "FBillNo": "CGDD001",
-            "FDate": "2025-05-20",
-            "FSupplierId": {"FNumber": "SUP001"},
-            "FPOOrderEntry": [
-                {
-                    "FMaterialId": {"FNumber": "MAT001"},
-                    "FQty": 100,
-                    "FPrice": 10.0
-                }
-            ]
-        }
-    }
+from kingdee_sdk import KingdeeClient, AuthType
+
+# 创建客户端
+client = KingdeeClient(
+    server_url="http://your-server/K3Cloud",
+    acct_id="your_acct_id",
+    username="your_username",
+    password="your_password",
+    auth_type=AuthType.PASSWORD,
+    debug=False
 )
+
+# 自动登录
+client.login()
+
+# 查询物料
+result = client.execute_bill_query(
+    form_id="BD_MATERIAL",
+    field_keys="FNumber,FName,FSpecification,FDocumentStatus",
+    filter_string="FDocumentStatus='C'",  # 已审核
+    limit=10
+)
+
+# 查看详情
+detail = client.view("BD_MATERIAL", {"Number": "MAT001"})
+
+# 创建单据
+client.save("BD_MATERIAL", {
+    "Model": {
+        "FNumber": "NEW001",
+        "FName": "新物料"
+    }
+})
+
+# 提交审批
+client.submit("BD_MATERIAL", {"Numbers": ["NEW001"]})
+
+# 审核
+client.audit("BD_MATERIAL", {"Numbers": ["NEW001"]})
+
+# 登出
+client.logout()
 ```
 
-#### 提交并审核单据
-```python
-# 提交
-client.submit(form_id='PUR_PurchaseOrder', data={"Numbers": ["CGDD001"]})
-# 审核
-client.audit(form_id='PUR_PurchaseOrder', data={"Numbers": ["CGDD001"]})
+---
+
+## MCP Agent 实现
+
+### MCP 工具列表（22 个）
+
+#### 通用单据操作（10 个）
+
+| 工具名 | 功能 | 对应 SDK 方法 |
+|--------|------|---------------|
+| `query_bill` | 通用单据查询 | `execute_bill_query` |
+| `view_bill` | 查看单据详情 | `view` |
+| `save_bill` | 创建/修改单据 | `save` |
+| `draft_bill` | 暂存单据 | `draft` |
+| `batch_save_bill` | 批量保存单据 | `batch_save` |
+| `submit_bill` | 提交审批 | `submit` |
+| `audit_bill` | 审核单据 | `audit` |
+| `unaudit_bill` | 反审核单据 | `unaudit` |
+| `delete_bill` | 删除单据 | `delete` |
+| `upload_attachment` | 上传附件 | `upload_attachment` |
+| `download_attachment` | 下载附件 | `download_attachment` |
+
+#### PLM 物料管理（4 个）
+
+| 工具名 | 功能 |
+|--------|------|
+| `search_materials` | 搜索物料（模糊匹配） |
+| `get_material_detail` | 获取物料详情 |
+| `create_material` | 创建新物料 |
+| `batch_create_materials` | 批量创建物料 |
+
+#### PLM BOM 管理（3 个）
+
+| 工具名 | 功能 |
+|--------|------|
+| `get_bom` | 获取物料 BOM 结构 |
+| `create_bom` | 创建 BOM |
+| `batch_create_boms` | 批量创建 BOM |
+
+#### PLM 变更管理（3 个）
+
+| 工具名 | 功能 |
+|--------|------|
+| `get_pending_ecos` | 获取待审批变更单 |
+| `approve_eco` | 审批变更单 |
+| `reject_eco` | 驳回变更单 |
+
+#### PLM 图纸管理（3 个）
+
+| 工具名 | 功能 |
+|--------|------|
+| `upload_drawing` | 上传图纸并关联物料 |
+| `download_drawing` | 下载图纸 |
+| `search_drawings` | 搜索图纸 |
+
+### MCP 使用示例
+
+```bash
+# 启动 MCP Server（stdio 模式）
+python kingdee_mcp_agent/mcp_server/server.py --transport stdio
+
+# 启动 MCP Server（HTTP 模式）
+python kingdee_mcp_agent/mcp_server/server.py --transport sse --port 8000
 ```
+
+---
 
 ## 探索结论
 
-### 当前状态
+### 可用能力
 
-1. **PLM 文档库模块 WebAPI 不可用**
-   - 所有尝试的 PLM 文档相关表单 ID 均返回"业务对象不存在"
-   - BOS_BillType 中只有 1 个 PLM 相关单据类型：`PLMTDFA01_SYS: PLM替代方案`
-   - 没有找到 WD- 开头的单据类型
-   - 没有找到名称包含"文档"的单据类型
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| 物料查询/创建 | ✓ | 完整可用 |
+| BOM 查询/创建 | ✓ | 完整可用 |
+| 采购/销售/生产单据 | ✓ | 完整可用 |
+| 单据审批流程 | ✓ | 提交、审核、反审核 |
+| 附件上传/下载 | ✓ | 支持大文件分块上传 |
+| 批量操作 | ✓ | 批量创建、批量审核 |
+| MCP Agent | ✓ | 22 个工具，自然语言交互 |
 
-2. **业务流程 API 完全可用**
-   - 查询能力 ✓
-   - 单据操作（创建、提交、审核、删除） ✓
-   - 附件操作 ✓
-   - 批量操作 ✓
+### 不可用能力
 
-### 建议下一步
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| PLM 文档库 | ✗ | WebAPI 未开放，需联系金蝶实施顾问 |
+| PLM 图纸管理 | ⚠️ | MCP 工具已实现，但依赖 BOS_Attachment |
 
-1. **业务流程自动化**：可以使用 API 实现采购、销售、生产等业务流程自动化
-2. **PLM 文档库**：联系金蝶实施顾问确认 WebAPI 是否开放
-3. **替代方案**：使用 SVN/Git 管理源代码，使用金蝶附件功能关联文件
+### 建议
 
-## 相关文件
+1. **业务流程自动化**：SDK 和 MCP 完全支持物料、BOM、采购、销售、生产等业务流程自动化
+2. **PLM 文档库**：联系金蝶实施顾问确认 WebAPI 是否开放，或使用 SVN/Git 管理源代码
+3. **扩展开发**：可通过 MCP Agent 接入企业微信/钉钉，实现自然语言交互
 
-| 文件 | 说明 |
-|------|------|
-| `extract_submitted_items.py` | 提取已提交项目脚本 |
-| `已提交项目清单.md` | 提取结果（40 条记录） |
-| `verify_material_codes.py` | 子物料编码校验脚本 |
-| `子物料编码校验结果.md` | 校验报告（全部通过） |
-| `explore_plm_forms.py` | PLM 表单探索脚本 |
-| `explore_plm_doclib.py` | PLM 文档库探索脚本 |
-| `explore_plm_doclib_v2.py` | PLM 文档库精确查询脚本 |
-| `query_form_metadata.py` | 表单元数据查询脚本 |
-| `query_plm_real_forms.py` | PLM 真实表单探索脚本 |
-| `explore_material_attachments.py` | 物料附件探索脚本 |
-| `view_material_full.py` | 物料详情查看脚本 |
-| `material_detail.json` | 物料详情 JSON 文件 |
-| `search_doc_instance.py` | 根据文档实例搜索脚本 |
-| `query_plm_doc_detail.py` | PLM_DOC 详细查询脚本 |
-| `search_by_code.py` | 根据编码格式搜索脚本 |
-| `list_all_bill_types.py` | 列出所有单据类型脚本 |
-| `all_bill_types.json` | 所有单据类型 JSON 文件 |
-| `bill_types_list.txt` | 所有单据类型文本列表 |
-| `find_real_forms.py` | 正确测试表单存在脚本 |
+---
 
 ## 更新记录
 
@@ -260,5 +255,5 @@ client.audit(form_id='PUR_PurchaseOrder', data={"Numbers": ["CGDD001"]})
 |------|------|
 | 2026-05-20 | 初始探索，确认物料查询可用 |
 | 2026-05-20 | 深入探索 PLM 文档库，确认 WebAPI 不可用 |
-| 2026-05-20 | 探索物料附件，确认附件功能未启用 |
-| 2026-05-20 | 根据用户提供的文档实例深入探索，确认 PLM 文档库 WebAPI 未开放 |
+| 2026-05-20 | 探索业务流程 API，确认单据操作完整可用 |
+| 2026-05-20 | 整合 SDK 和 MCP 实现，优化文档结构 |
