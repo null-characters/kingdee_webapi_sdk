@@ -362,16 +362,25 @@ python scripts/detect_acct_id.py
   - 实测闭环（2026-09 已验证）：上传到**已审核的业务单据**成功并返回 `FileId` → `BOS_Attachment`
     可查到该记录 → 下载回来 md5 与原文一致；上传到**基础资料/物料**（`BD_MATERIAL`）会被账套拒绝，
     报“当前单据状态不允许上传附件（MsgCode 11）”，属账套对该对象的管控，与参数无关。
-- **当前账套未安装 PLM 模块（已排除账号权限因素）**：`ENG_ECO` / `ENG_ECN` / `PLM_DOC` /
-  `PLM_DRAWING` / `PLM_PROJECT` / `PLM_TASK` 均报「标识为 X 的业务对象不存在，或者被删除」，
-  而 `ENG_BOM` / `ENG_ROUTE` / `BOS_Attachment` 可正常访问；用金蝶内置管理员账号复测的结果与
-  普通账号完全一致（两组均只能访问上述三个对象），说明是账套未安装/未启用这些模块，而非账号权限不足。
-  因此变更单与图纸相关功能在本账套不可用：查询类会降级返回空列表，写入类会报“业务对象不存在”。
+- **业务对象清单（账套实际安装）**：见 [`docs/reference/formids_list.tsv`](./docs/reference/formids_list.tsv)
+  —— 254 个业务对象 / 528 条单据类型，取自 `BOS_BillType.FBillFormID`。
+- **变更单可用，但标识不是 `ENG_ECO`**：本账套工程变更单的业务对象是 **`ENG_ECNOrder`**
+  （表 `T_ENG_ECNORDER`，对应单据类型 `GCBG01_SYS` 普通工程变更单），变更申请单是 **`ENG_ECRApply`**
+  （表 `T_ENG_ECR`，`GCBGSQ01_SYS`）；`ENG_ECO` / `ENG_ECN` 在本账套并不存在。
+  `plm_tools.PLMFormIds` 已按实测修正，`get_pending_ecos` 改用 `FDocumentStatus = 'B'`（待审核）过滤、
+  字段取 `FBillTypeID.FName` —— 实测不再报错（该账套当前无变更单数据，返回空列表）。
+- **PLM 文档/图纸/项目/任务未安装（已排除账号权限因素）**：`PLM_DOC` / `PLM_DRAWING` /
+  `PLM_PROJECT` / `PLM_TASK` 均报「标识为 X 的业务对象不存在，或者被删除」，业务对象清单里也
+  没有任何 `PLM_*` 单据对象（`PLM_STD_BOM_SUB` 只是替代料 `ENG_Substitution` 的别名）；
+  用金蝶内置管理员账号复测与普通账号结果一致。因此图纸/文档管理在本账套不可用
+  （查询降级返回空列表；上传会卡在"保存图纸单据"那一步），但**通用附件接口可用**（见上一条），
+  需要随单挂图纸时建议改用通用附件接口。
 
 ## 参考文档
 
 - [金蝶云星空 WebAPI 接口说明书](./kingdee_sdk/api文档.md)
 - [金蝶云星空开放平台 API 文档](https://openapi.open.kingdee.com/ApiDoc)（JS 单页应用，需用浏览器打开）
+- [账套业务对象清单（254 个）](./docs/reference/formids_list.tsv)
 - [MCP Agent 详细说明](./kingdee_mcp_agent/README.md)
 - [快速开始](./docs/guides/快速开始.md)
 - [使用指南](./docs/guides/使用指南.md)
