@@ -1,0 +1,2 @@
+# 运行 exe 打包所需的第三方库（tkinter 是 Python 自带的，不需要写在这里）
+requests>=2.28.0

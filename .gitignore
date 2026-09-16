@@ -73,3 +73,9 @@ logs/
 
 # WorkBuddy data (private)
 .workbuddy/
+
+# Reasonix 会话/任务数据（本机自动生成）
+.reasonix/
+
+# 真实账套抽样数据（含客户/供应商/采购价，仅本地保留，不入库）
+data/sample_export/
