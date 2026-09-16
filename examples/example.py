@@ -3,8 +3,14 @@
 支持：查询物料、创建BOM、审批变更单、上传图纸、附件管理等操作
 """
 
+import os
+import sys
+
+# 保证以 `python examples/example.py` 直接运行时可以导入 kingdee_sdk
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from kingdee_sdk import KingdeeClient, PLMTools
-from kingdee_sdk.config import KINGDEE_CONFIG
+from kingdee_sdk.config_loader import KINGDEE_CONFIG, validate_config
 
 
 def demo_api_sign_auth():
@@ -106,7 +112,7 @@ def demo_create_bom(plm: PLMTools):
     print("演示4: 创建BOM")
     print("=" * 60)
 
-    bom_no = "BOM-2024-001"
+    bom_no = "1.LE.CC.050010_V.0"   # ENG_BOM 没有独立版本字段，版本并入编号
     print(f"\n创建BOM: {bom_no}")
 
     items = [
@@ -118,7 +124,7 @@ def demo_create_bom(plm: PLMTools):
     try:
         result = plm.create_bom(
             bom_no=bom_no,
-            parent_material_code="PARENT001",
+            parent_material_code="1.LE.CC.050010",
             items=items,
             org_id=1  # 默认组织ID
         )
@@ -161,38 +167,42 @@ def demo_eco_workflow(plm: PLMTools):
 
 def demo_attachment_operations(client: KingdeeClient, plm: PLMTools):
     """
-    演示6: 附件上传/下载（PLM图纸管理）
+    演示6: 附件上传/下载（通用附件接口）
+
+    说明：通用附件接口（AttachmentUpload / AttachmentDownLoad）适用于任何单据，
+          附件数据存放在 BOS_Attachment（关键字段 FFileId / FAttachmentName / FExtName）。
+          图纸专用接口 PLMTools.upload_drawing 需要账套启用 PLM 图纸单据（PLM_DRAWING），
+          未启用的账套会返回“业务对象不存在”。
     """
     print("=" * 60)
-    print("演示6: 附件操作（图纸管理）")
+    print("演示6: 附件操作（通用附件接口）")
     print("=" * 60)
 
-    # 上传图纸到新文档
-    file_path = r"C:\drawings\sample_drawing.pdf"  # 替换为实际路径
-    print(f"\n1. 上传图纸: {file_path}")
-    print("   [注：请确保文件存在，此演示仅供参考]")
+    file_path = "/path/to/sample.pdf"  # 替换为实际路径
+    print(f"\n1. 上传附件: {file_path}")
+    print("   [注：文件不存在时会跳过，此演示仅供参考]")
 
     try:
-        # 分块上传（适合大文件）
-        result = plm.upload_drawing(
+        # 通用附件上传（官方 AttachmentUpLoad，整文件上传）
+        result = client.upload_attachment(
             file_path=file_path,
-            drawing_name="示例图纸",
-            drawing_code="DRW-2024-001",
-            folder_id=1,
-            chunk_size=1024 * 1024  # 1MB分块
+            form_id="BD_MATERIAL",
+            bill_no="1.LA.LE.001001"   # 官方要求：FormId + BillNO 指向要挂附件的单据
         )
-        print(f"   ✓ 上传成功，文档ID: {result.get('Id')}")
-    except FileNotFoundError:
-        print(f"   ! 文件不存在，跳过上传演示")
+        print(f"   ✓ 上传结果: {result}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"   ! 文件不存在，跳过上传演示（{e}）")
     except Exception as e:
         print(f"   ✗ 上传失败: {e}")
 
+    # 图纸接口（需要账套启用 PLM 图纸单据）
+    print("\n2. 图纸上传接口签名（需要账套启用 PLM_DRAWING）:")
+    print("   plm.upload_drawing(file_path=..., material_code='1.LA.LE.001001', version='V1.0')")
+
     # 下载附件示例
-    print("\n2. 下载附件:")
-    form_id = "BD_MATERIAL"
-    inter_id = "12345"  # 替换为实际的单据内码
-    print(f"   从 {form_id} 单据 {inter_id} 下载附件")
-    print("   [演示：请先确认单据存在附件]")
+    print("\n3. 下载附件:")
+    print("   file_id 取自 BOS_Attachment 的 FFileId（形如 Temp_xxx-xxx）")
+    print("   client.download_attachment(file_id, save_path='./attachment.pdf')")
 
 
 def demo_batch_operations(plm: PLMTools):
@@ -293,10 +303,12 @@ def main():
     print()
 
     # 检查配置
-    if KINGDEE_CONFIG["server_url"] == "http://localhost/k3cloud":
-        print("⚠ 警告: 请先在 kingdee_sdk/config.py 中配置正确的参数!")
-        print("   需要配置的项：server_url, acct_id, username, app_id, app_secret")
+    missing = validate_config(KINGDEE_CONFIG)
+    if missing:
+        print(f"⚠ 警告: 缺少配置项: {', '.join(missing)}")
+        print("   请设置环境变量（推荐），或复制 kingdee_sdk/config.example.py 为 kingdee_sdk/config.py")
         print()
+        return
 
     # 1. 登录（使用API签名认证）
     client = demo_api_sign_auth()

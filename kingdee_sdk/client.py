@@ -354,16 +354,17 @@ class KingdeeClient:
         result = self._request("execute_bill_query", request_data)
         
         # 检查结果中是否包含错误信息
-        # 金蝶查询接口有时返回 [{}] 格式的错误，而不是抛异常
+        # 金蝶查询接口出错时不会返回 HTTP 错误，而是把错误体塞进结果里：[{}] 或 [[{}]]
         if isinstance(result, list) and len(result) > 0:
-            first_item = result[0]
-            if isinstance(first_item, dict) and 'Result' in first_item:
-                response_status = first_item.get('Result', {}).get('ResponseStatus', {})
+            candidates = result[0] if isinstance(result[0], (list, tuple)) else [result[0]]
+            for item in candidates:
+                if not isinstance(item, dict) or 'Result' not in item:
+                    continue
+                response_status = item.get('Result', {}).get('ResponseStatus', {})
                 if response_status.get('IsSuccess') == False:
                     errors = response_status.get('Errors', [])
-                    if errors:
-                        error_msg = errors[0].get('Message', '查询失败')
-                        raise KingdeeAPIError(error_msg, response_data=first_item)
+                    error_msg = errors[0].get('Message', '查询失败') if errors else '查询失败'
+                    raise KingdeeAPIError(error_msg, response_data=item)
         
         return result
     
@@ -372,94 +373,83 @@ class KingdeeClient:
         file_path: str,
         form_id: Optional[str] = None,
         bill_no: Optional[str] = None,
-        entry_id: Optional[str] = None,
-        row_id: Optional[str] = None,
-        chunk_size: int = 1024 * 1024  # 1MB分块
+        inter_id: Optional[str] = None,
+        entry_key: Optional[str] = None,
+        entry_inter_id: Optional[str] = None,
+        alias_file_name: Optional[str] = None,
+        file_id: Optional[str] = None,
+        is_last: bool = True
     ) -> Dict:
         """
-        上传附件（支持分块上传大文件）
-        
+        上传附件（官方 AttachmentUpLoad 接口）
+
+        官方参数说明（整文件一次性上传，该接口本身不支持分片）：
+            FileName        文件名
+            FormId          表单ID（BOS 业务对象标识，如 BD_MATERIAL，不能用数据库表名）
+            InterId         单据内码
+            BillNO          单据编号
+            SendByte        Base64 编码的文件字节流（注意：不是 hex）
+            IsLast          是否最后一次上传（单文件上传固定传 True）
+            Entrykey        单据体标识（上传单据体附件时填写）
+            EntryinterId    分录内码（单据头附件可不填或填 -1）
+            AliasFileName   附件别名
+            FileId          文件ID；分多次上传时，首次上传后必填
+
         Args:
-            file_path: 文件路径
-            form_id: 表单ID（可选）
-            bill_no: 单据编号（可选）
-            entry_id: 分录ID（可选）
-            row_id: 行ID（可选）
-            chunk_size: 分块大小，默认1MB
-            
+            file_path: 本地文件路径
+            form_id: 表单ID（官方要求必填）
+            bill_no: 单据编号（官方要求必填）
+            inter_id: 单据内码
+            entry_key: 单据体标识（单据体附件）
+            entry_inter_id: 分录内码
+            alias_file_name: 附件别名
+            file_id: 已有文件ID（续传/关联时用）
+            is_last: 是否最后一次上传，默认 True
+
         Returns:
-            上传结果
+            上传结果（含 FileId）
+
+        Note:
+            大文件为 Base64 一次性读入内存上传，请留意内存占用。
         """
         self._check_login()
-        
+
         if not os.path.exists(file_path):
             raise ValueError(f"文件不存在: {file_path}")
-        
+
+        import base64
+
         file_name = os.path.basename(file_path)
-        file_size = os.path.getsize(file_path)
-        
-        # 小文件直接上传
-        if file_size <= chunk_size:
-            with open(file_path, 'rb') as f:
-                file_content = f.read()
-            
-            data = {
-                "FileName": file_name,
-                "FileContent": file_content.hex() if isinstance(file_content, bytes) else file_content
-            }
-            if form_id:
-                data["FormId"] = form_id
-            if bill_no:
-                data["BillNo"] = bill_no
-            
-            return self._request("attachment_upload", data)
-        
-        # 大文件分块上传
-        return self._upload_attachment_chunked(file_path, file_name, form_id, bill_no, chunk_size)
-    
-    def _upload_attachment_chunked(
-        self,
-        file_path: str,
-        file_name: str,
-        form_id: Optional[str],
-        bill_no: Optional[str],
-        chunk_size: int
-    ) -> Dict:
-        """分块上传附件"""
-        file_size = os.path.getsize(file_path)
-        chunks = []
-        
         with open(file_path, 'rb') as f:
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-        
-        total_chunks = len(chunks)
-        results = []
-        
-        for i, chunk in enumerate(chunks):
-            data = {
-                "FileName": file_name,
-                "FileContent": chunk.hex(),
-                "ChunkIndex": i,
-                "TotalChunks": total_chunks,
-                "IsLastChunk": (i == total_chunks - 1)
-            }
-            if form_id:
-                data["FormId"] = form_id
-            if bill_no:
-                data["BillNo"] = bill_no
-            
-            result = self._request("attachment_upload", data)
-            results.append(result)
-            
-            if self.debug:
-                logger.debug(f"上传分块 {i+1}/{total_chunks}")
-        
-        return results[-1] if results else {}
-    
+            file_content = f.read()
+
+        payload = {
+            "FileName": file_name,
+            "SendByte": base64.b64encode(file_content).decode('ascii'),
+            "IsLast": is_last,
+        }
+        if form_id:
+            payload["FormId"] = form_id
+        if bill_no:
+            payload["BillNO"] = bill_no
+        if inter_id:
+            payload["InterId"] = inter_id
+        if entry_key:
+            payload["Entrykey"] = entry_key
+        if entry_inter_id is not None:
+            payload["EntryinterId"] = entry_inter_id
+        if alias_file_name:
+            payload["AliasFileName"] = alias_file_name
+        if file_id:
+            payload["FileId"] = file_id
+
+        # 金蝶 WebAPI 要求把这组参数包进 {"data": "<json字符串>"}（与 execute_bill_query 一致），
+        # 直接放顶层会报“接口参数data不能为空”
+        return self._request(
+            "attachment_upload",
+            {"data": json.dumps(payload, ensure_ascii=False)}
+        )
+
     def download_attachment(
         self,
         file_id: str,
@@ -470,19 +460,19 @@ class KingdeeClient:
         下载附件
         
         Args:
-            file_id: 文件ID（从 BOS_Attachment 表的 FInterID 字段获取，格式如 Temp_xxx-xxx）
+            file_id: 文件ID，取自 BOS_Attachment 的 FFileId 字段（形如 Temp_xxx-xxx）；
+                     首次上传返回的 FileId 也可直接使用
             save_path: 保存路径，默认使用附件原名
-            start_index: 下载起始位置，默认为0
-            
+            start_index: 下载起始位置，默认为0（官方接口按 StartIndex 分片下载）
+
         Returns:
             保存的文件路径
         """
         self._check_login()
-        
+
         import base64
-        
-        # 金蝶附件下载接口参数格式
-        # FileId 格式: Temp_xxx-xxx-xxx 或纯 UUID
+
+        # 官方参数：FileId + StartIndex（StartIndex 为分片下载起始位置，首次传 0）
         param_str = '{"FileId":"' + str(file_id) + '","StartIndex":' + str(start_index) + '}'
         data = {"data": param_str}
         result = self._request("attachment_download", data)

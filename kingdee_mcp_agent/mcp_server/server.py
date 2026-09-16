@@ -4,7 +4,6 @@
 将金蝶 SDK 封装为 MCP 工具，供 Agent 调用。
 """
 
-import os
 import sys
 import json
 import logging
@@ -20,8 +19,12 @@ from mcp.server.fastmcp import FastMCP
 
 # 导入金蝶 SDK
 from kingdee_sdk.client import KingdeeClient
-from kingdee_sdk.auth import AuthType
 from kingdee_sdk.plm_tools import PLMTools
+from kingdee_sdk.config_loader import (
+    MISSING_CONFIG_HINT,
+    load_kingdee_config,
+    validate_config,
+)
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -43,43 +46,15 @@ def get_client() -> KingdeeClient:
     global _client, _plm_tools
 
     if _client is None:
-        # 优先从环境变量读取，其次从 settings.py 读取
-        server_url = os.getenv("KINGDEE_SERVER_URL")
-        acct_id = os.getenv("KINGDEE_ACCT_ID")
-        username = os.getenv("KINGDEE_USERNAME")
-        password = os.getenv("KINGDEE_PASSWORD")
+        # 配置统一由 kingdee_sdk.config_loader 提供：
+        # 环境变量 > kingdee_sdk/config.py > kingdee_mcp_agent/config/settings.py > 内置默认值
+        config = load_kingdee_config()
 
-        # 如果环境变量未设置，尝试从 settings.py 读取
-        if not all([server_url, acct_id, username, password]):
-            try:
-                # 添加 config 目录到路径
-                config_dir = str(Path(__file__).parent.parent / "config")
-                if config_dir not in sys.path:
-                    sys.path.insert(0, config_dir)
-                from settings import KINGDEE_CONFIG
-                server_url = server_url or KINGDEE_CONFIG.get("server_url")
-                acct_id = acct_id or KINGDEE_CONFIG.get("acct_id")
-                username = username or KINGDEE_CONFIG.get("username")
-                password = password or KINGDEE_CONFIG.get("password")
-            except ImportError:
-                pass
+        missing = validate_config(config)
+        if missing:
+            raise ValueError(f"缺少金蝶连接配置项: {', '.join(missing)}\n{MISSING_CONFIG_HINT}")
 
-        if not all([server_url, acct_id, username, password]):
-            raise ValueError(
-                "请配置金蝶连接信息（任选其一）：\n"
-                "1. 设置环境变量: KINGDEE_SERVER_URL, KINGDEE_ACCT_ID, KINGDEE_USERNAME, KINGDEE_PASSWORD\n"
-                "2. 创建 config/settings.py 并配置 KINGDEE_CONFIG"
-            )
-        
-        _client = KingdeeClient(
-            server_url=server_url,
-            acct_id=acct_id,
-            username=username,
-            password=password,
-            auth_type=AuthType.PASSWORD,
-            auto_login=True,
-            debug=False
-        )
+        _client = KingdeeClient(**config, auto_login=True, debug=False)
         _plm_tools = PLMTools(_client)
         logger.info("金蝶客户端初始化完成")
     
@@ -368,28 +343,37 @@ def unaudit_bill(form_id: str, numbers: str) -> Dict:
 def upload_attachment(
     file_path: str,
     form_id: Optional[str] = None,
-    bill_no: Optional[str] = None
+    bill_no: Optional[str] = None,
+    inter_id: Optional[str] = None,
+    entry_key: Optional[str] = None,
+    alias_file_name: Optional[str] = None
 ) -> Dict:
     """
-    上传附件到金蝶系统
+    上传附件到金蝶系统（官方 AttachmentUpLoad，整文件上传，不支持分片）
     
     Args:
         file_path: 本地文件路径
-        form_id: 关联的表单ID（可选）
-        bill_no: 关联的单据编号（可选）
+        form_id: 关联表单ID，如 BD_MATERIAL（官方要求必填）
+        bill_no: 关联单据编号（官方要求必填）
+        inter_id: 单据内码（可选）
+        entry_key: 单据体标识（上传单据体附件时填，可选）
+        alias_file_name: 附件别名（可选）
     
     Returns:
         上传结果，包含附件ID
     
     Examples:
-        upload_attachment("/path/to/file.pdf", "BD_MATERIAL", "MAT001")
+        upload_attachment("/path/to/file.pdf", "BD_MATERIAL", "1.LA.LE.001001")
     """
     client = get_client()
     try:
         result = client.upload_attachment(
             file_path=file_path,
             form_id=form_id,
-            bill_no=bill_no
+            bill_no=bill_no,
+            inter_id=inter_id,
+            entry_key=entry_key,
+            alias_file_name=alias_file_name
         )
         logger.info(f"上传附件成功: {file_path}")
         return result
@@ -552,19 +536,19 @@ def batch_create_materials(materials_json: str) -> Dict:
 # ==================== PLM BOM 管理工具 ====================
 
 @mcp.tool()
-def get_bom(material_code: str, version: str = "V1.0") -> Optional[Dict]:
+def get_bom(material_code: str, version: Optional[str] = None) -> Optional[Dict]:
     """
     获取物料的 BOM 结构
     
     Args:
         material_code: 父件物料编码
-        version: BOM 版本，默认 V1.0
+        version: 可选，BOM 版本后缀（BOM 编号形如 1.LE.CC.050010_V.0，版本已包含在编号中）
     
     Returns:
         BOM 详情，包含所有子件信息
     
     Examples:
-        get_bom("PRODUCT001", "V1.0")
+        get_bom("1.LE.CC.050010")
     """
     plm = get_plm_tools()
     try:
@@ -581,24 +565,22 @@ def create_bom(
     bom_no: str,
     parent_material_code: str,
     items_json: str,
-    version: str = "V1.0",
     bom_name: Optional[str] = None
 ) -> Dict:
     """
     创建 BOM
     
     Args:
-        bom_no: BOM 编号
+        bom_no: BOM 编号（ENG_BOM 没有独立版本字段，版本请直接并入编号，如 1.LE.CC.050010_V.0）
         parent_material_code: 父件物料编码
         items_json: 子件列表 JSON，格式: [{"material_code": "子件编码", "qty": 数量}, ...]
-        version: BOM 版本，默认 V1.0
         bom_name: BOM 名称（可选）
     
     Returns:
         创建结果
     
     Examples:
-        create_bom("BOM001", "PRODUCT001", '[{"material_code": "PART001", "qty": 2}]')
+        create_bom("1.LE.CC.050010_V.0", "1.LE.CC.050010", '[{"material_code": "PART001", "qty": 2}]')
     """
     plm = get_plm_tools()
     try:
@@ -607,7 +589,6 @@ def create_bom(
             bom_no=bom_no,
             parent_material_code=parent_material_code,
             items=items,
-            version=version,
             bom_name=bom_name
         )
         logger.info(f"创建 BOM {bom_no} 成功")
@@ -623,13 +604,13 @@ def batch_create_boms(boms_json: str) -> Dict:
     批量创建 BOM
     
     Args:
-        boms_json: BOM 列表 JSON，格式: [{"bom_no": "...", "parent_material_code": "...", "items": [...], "version": "..."}, ...]
+        boms_json: BOM 列表 JSON，格式: [{"bom_no": "编号（含版本，如 1.LE.CC.050010_V.0）", "parent_material_code": "...", "items": [...]}, ...]
     
     Returns:
         批量创建结果
     
     Examples:
-        batch_create_boms('[{"bom_no": "BOM001", "parent_material_code": "P001", "items": [{"material_code": "A001", "qty": 1}]}]')
+        batch_create_boms('[{"bom_no": "1.LE.CC.050010_V.0", "parent_material_code": "1.LE.CC.050010", "items": [{"material_code": "A001", "qty": 1}]}]')
     """
     plm = get_plm_tools()
     try:

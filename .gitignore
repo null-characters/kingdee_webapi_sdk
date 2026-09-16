@@ -62,6 +62,10 @@ Thumbs.db
 
 # Test scripts (may contain sensitive data)
 test_*.py
+# 例外：以下测试脚本已改为从环境变量读取凭证，纳入版本管理
+!tests/test_*.py
+!kingdee_mcp_agent/test_*.py
+!kingdee_mcp_agent/agent/test_*.py
 
 # Logs
 logs/

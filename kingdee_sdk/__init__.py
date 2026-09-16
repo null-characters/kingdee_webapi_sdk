@@ -30,6 +30,12 @@ from .client import KingdeeClient
 from .auth import KingdeeAuth, AuthType
 from .exceptions import KingdeeAPIError, AuthenticationError, ValidationError, NotFoundError
 from .plm_tools import PLMTools
+from .config_loader import (
+    KINGDEE_CONFIG,
+    describe_config,
+    load_kingdee_config,
+    validate_config,
+)
 
 __version__ = "2.0.0"
 __all__ = [
@@ -40,5 +46,9 @@ __all__ = [
     "KingdeeAPIError",
     "AuthenticationError",
     "ValidationError",
-    "NotFoundError"
+    "NotFoundError",
+    "KINGDEE_CONFIG",
+    "load_kingdee_config",
+    "validate_config",
+    "describe_config",
 ]

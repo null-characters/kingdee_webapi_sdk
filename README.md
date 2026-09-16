@@ -16,7 +16,7 @@
 - ✅ 完善的错误处理
 
 ### MCP Agent 功能（新增）
-- ✅ 14 个 MCP 工具覆盖常用业务场景
+- ✅ 24 个 MCP 工具覆盖常用业务场景
 - ✅ 自然语言交互，无需编写代码
 - ✅ 支持腾讯云 GLM-5 / DeepSeek / OpenAI
 - ✅ 可接入企业微信/钉钉
@@ -31,12 +31,13 @@ kingdee_webapi_sdk/
 │   ├── auth.py               # 认证模块
 │   ├── exceptions.py         # 异常定义
 │   ├── plm_tools.py          # PLM 工具集
-│   ├── config.py             # 配置文件（需自行创建）
-│   └── config.example.py     # 配置示例
+│   ├── config_loader.py      # 配置加载（环境变量优先）
+│   ├── config.py             # 本地覆盖配置（需自行创建，已被 .gitignore 忽略）
+│   └── config.example.py     # 配置模板
 │
 ├── kingdee_mcp_agent/        # MCP Agent
 │   ├── mcp_server/           # MCP Server
-│   │   ├── server.py         # 14 个金蝶工具
+│   │   ├── server.py         # 24 个金蝶工具
 │   │   └── requirements.txt
 │   ├── agent/                # Agent 服务
 │   │   ├── agent.py          # Agent 主逻辑
@@ -87,37 +88,34 @@ pip install requests
 
 #### 2. 配置
 
-复制配置示例文件：
+凭证统一从环境变量读取（不写入代码或仓库）：
 
 ```bash
-cp kingdee_sdk/config.example.py kingdee_sdk/config.py
+export KINGDEE_SERVER_URL="http://your-server/K3Cloud"
+export KINGDEE_ACCT_ID="your_acct_id"
+export KINGDEE_USERNAME="your_username"
+export KINGDEE_PASSWORD="your_password"
+# 可选（API签名认证）：
+# export KINGDEE_APP_ID="your_app_id"
+# export KINGDEE_APP_SECRET="your_app_secret"
+# export KINGDEE_AUTH_TYPE="SIGN_SHA256"     # PASSWORD(默认) / SIGN_SHA256 / SIGN_SHA1 / APP_SECRET
 ```
 
-编辑 `config.py` 填入实际配置：
+也可以复制 `kingdee_sdk/config.example.py` 为 `kingdee_sdk/config.py`（该文件已被 `.gitignore` 忽略）做本地覆盖。
 
-```python
-KINGDEE_CONFIG = {
-    "server_url": "http://your-server/K3Cloud",
-    "acct_id": "your_acct_id",
-    "username": "your_username",
-    "password": "your_password",
-    "lcid": 2052
-}
-```
+配置优先级：代码显式传入 > 环境变量 > `kingdee_sdk/config.py` > `kingdee_mcp_agent/config/settings.py` > 内置默认值。
 
 #### 3. 基础用法
 
 ```python
-from kingdee_sdk import KingdeeClient, AuthType
+from kingdee_sdk import KingdeeClient
+from kingdee_sdk.config_loader import KINGDEE_CONFIG, validate_config
 
-# 创建客户端
-client = KingdeeClient(
-    server_url="http://your-server/K3Cloud",
-    acct_id="your_acct_id",
-    username="your_username",
-    password="your_password",
-    auth_type=AuthType.PASSWORD
-)
+# 检查配置是否完整（缺凭证时会提示具体缺哪几项）
+missing = validate_config(KINGDEE_CONFIG)
+
+# 创建客户端（KINGDEE_CONFIG 的键名与客户端参数一致）
+client = KingdeeClient(**KINGDEE_CONFIG)
 
 # 登录
 client.login()
@@ -149,15 +147,25 @@ pip install -r requirements.txt
 
 #### 2. 配置
 
-复制配置示例文件：
+金蝶凭证与 LLM API Key 均从环境变量读取（MCP Server / Agent 共用）：
+
+```bash
+export KINGDEE_SERVER_URL="http://your-server/K3Cloud"
+export KINGDEE_ACCT_ID="your_acct_id"
+export KINGDEE_USERNAME="your_username"
+export KINGDEE_PASSWORD="your_password"
+export LLM_API_KEY="你的大模型 API Key"
+```
+
+如需调整非凭证选项（传输方式、模型名、端口、调试开关等），复制示例文件后按需修改：
 
 ```bash
 cp kingdee_mcp_agent/config/settings.example.py kingdee_mcp_agent/config/settings.py
 ```
 
-编辑 `settings.py` 填入：
-- 金蝶服务器配置
-- LLM API Key（腾讯云 GLM-5 / DeepSeek / OpenAI）
+> ⚠️ 用 Claude Desktop 等 MCP 客户端启动本 Server 时，客户端默认只传递 `PATH`/`HOME` 等白名单
+> 环境变量，因此凭证必须写进客户端的 `env` 配置（`mcpServers.<name>.env`）里，否则 server
+> 子进程读不到 `KINGDEE_*`，会在调用工具时报“缺少金蝶连接配置项”。
 
 #### 3. 运行 Agent
 
@@ -303,27 +311,65 @@ client = KingdeeClient(
 | `extract_submitted_items.py` | 提取已提交项目清单 |
 | `verify_material_codes.py` | 子物料编码校验 |
 
-运行示例：
+运行示例（脚本会自动定位仓库根目录，可在任意目录执行）：
 
 ```bash
-# 物料查询
+# SDK 功能演示
+python examples/demo.py
+
+# 交互式物料查询
 python examples/material_query.py
+
+# 物料详情查看
+python examples/view_material_full.py
 
 # ID检测
 python scripts/detect_acct_id.py
 ```
 
+> 运行前请先按上文设置环境变量（`KINGDEE_SERVER_URL` 等），
+> 否则脚本会提示具体缺少哪几项配置。
+
 ## 注意事项
 
-1. **配置安全**：`config.py` 和 `settings.py` 包含敏感信息，已被 `.gitignore` 忽略
-2. **会话管理**：SDK 自动管理会话，无需手动处理 Cookie
-3. **超时设置**：默认超时 30 秒，可通过 `timeout` 参数调整
-4. **调试模式**：设置 `debug=True` 可查看请求详情
-5. **生产环境**：建议使用 API 签名认证而非密码认证
+1. **配置安全**：凭证（金蝶密码、LLM API Key）只从环境变量读取，不写入代码或仓库；`kingdee_sdk/config.py` 与 `kingdee_mcp_agent/config/settings.py` 是可选的本地覆盖文件，已被 `.gitignore` 忽略，请勿提交
+2. **配置来源**：环境变量 > `kingdee_sdk/config.py` > `kingdee_mcp_agent/config/settings.py` > 内置默认值；`kingdee_sdk/config_loader.py` 提供 `load_kingdee_config()` / `validate_config()` / `describe_config()`
+3. **会话管理**：SDK 自动管理会话，无需手动处理 Cookie
+4. **超时设置**：默认超时 30 秒，可通过 `timeout` 参数调整
+5. **调试模式**：设置 `debug=True` 可查看请求详情
+6. **生产环境**：建议使用 API 签名认证而非密码认证
+
+## 接口与账套事实（实测）
+
+以下结论来自对当前账套的只读实测，换账套或升级版本后请重新验证：
+
+- **查询接口 `ExecuteBillQuery` 的错误形态**：出错时不返回 HTTP 错误，而是把错误体塞进结果里，
+  形如 `[[{"Result": {"ResponseStatus": {"IsSuccess": false, "Errors": [{"Message": "..."}]}}}]]`
+  （官方文档亦载明“错误结果只有一行数据且 IsSuccess 为 False”）。SDK 已在 `execute_bill_query`
+  中识别该形态并抛出 `KingdeeAPIError`，不再把错误体当数据返回。
+- **字段命名规则**：基础资料用 `字段.FNumber`（如 `FMaterialId.FNumber`），分录主键用 `FEntity_FEntryID`；
+  字段不存在时接口会明确报“元数据中标识为 X 的字段不存在”，可据此校验字段名。
+- **`ENG_BOM`（BOM）**：没有 `FBomNo` / `FVersion` 字段；BOM 编号就是 `FNumber`
+  （形如 `1.LE.CC.050010_V.0`，版本信息已包含在编号里），过滤条件用 `FMaterialId.FNumber`。
+- **附件接口**（已用真实上传/下载闭环验证过）：
+  - 上传 `AttachmentUpLoad` 参数：`FileName` / `FormId` / `InterId` / `BillNO` / `SendByte`（Base64）
+    / `IsLast` / `Entrykey` / `EntryinterId` / `AliasFileName` / `FileId`；**整文件一次性上传，接口不支持分片**，
+    大文件会以 Base64 全量读入内存。
+  - **参数必须包在 `{"data": "<json字符串>"}` 里**（与 `execute_bill_query` 一致）；直接放顶层会报
+    “接口参数data不能为空”。SDK 已按此实现。
+  - 下载 `AttachmentDownLoad` 参数：`FileId` + `StartIndex`（按 `StartIndex` 分片，首次传 0）；
+    `FileId` 取自附件表 `BOS_Attachment` 的 `FFileId`（形如 `Temp_xxx-xxx`）。
+  - 实测闭环（2026-09 已验证）：上传到**已审核的业务单据**成功并返回 `FileId` → `BOS_Attachment`
+    可查到该记录 → 下载回来 md5 与原文一致；上传到**基础资料/物料**（`BD_MATERIAL`）会被账套拒绝，
+    报“当前单据状态不允许上传附件（MsgCode 11）”，属账套对该对象的管控，与参数无关。
+- **当前账套未安装 PLM 模块**：`ENG_ECO` / `ENG_ECN` / `PLM_DOC` / `PLM_DRAWING` / `PLM_PROJECT` / `PLM_TASK`
+  均不存在（`ENG_BOM` / `ENG_ROUTE` / `BOS_Attachment` 存在）。因此变更单与图纸相关功能在本账套不可用：
+  查询类会降级返回空列表，写入类会报“业务对象不存在”。
 
 ## 参考文档
 
 - [金蝶云星空 WebAPI 接口说明书](./kingdee_sdk/api文档.md)
+- [金蝶云星空开放平台 API 文档](https://openapi.open.kingdee.com/ApiDoc)（JS 单页应用，需用浏览器打开）
 - [MCP Agent 详细说明](./kingdee_mcp_agent/README.md)
 - [快速开始](./docs/guides/快速开始.md)
 - [使用指南](./docs/guides/使用指南.md)

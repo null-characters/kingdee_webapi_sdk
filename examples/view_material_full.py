@@ -3,19 +3,16 @@
 完整查看物料详情，探索附件信息
 """
 
+import os
 import sys
-sys.path.insert(0, '/Users/fengbing/git_prj/kingdee_webapi_sdk')
 
-from kingdee_sdk import KingdeeClient, AuthType
+# 保证以 `python examples/view_material_full.py` 直接运行时可以导入 kingdee_sdk
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 
-KINGDEE_CONFIG = {
-    "server_url": "http://192.168.0.200/K3Cloud",
-    "acct_id": "668f7c152248a3",
-    "username": "冯冰",
-    "password": "888888",
-    "lcid": 2052,
-}
+from kingdee_sdk import KingdeeClient, AuthType
+from kingdee_sdk.config_loader import KINGDEE_CONFIG, validate_config
 
 def create_client():
     return KingdeeClient(
@@ -23,12 +20,18 @@ def create_client():
         acct_id=KINGDEE_CONFIG["acct_id"],
         username=KINGDEE_CONFIG["username"],
         password=KINGDEE_CONFIG["password"],
-        auth_type=AuthType.PASSWORD,
+        auth_type=KINGDEE_CONFIG.get("auth_type", AuthType.PASSWORD),
         lcid=KINGDEE_CONFIG.get("lcid", 2052),
         debug=False
     )
 
 def main():
+    missing = validate_config(KINGDEE_CONFIG)
+    if missing:
+        print(f"缺少配置项: {', '.join(missing)}")
+        print("请设置环境变量（推荐）或复制 kingdee_sdk/config.example.py 为 kingdee_sdk/config.py")
+        return
+
     client = create_client()
     client.login()
     

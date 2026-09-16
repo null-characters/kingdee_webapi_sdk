@@ -149,24 +149,41 @@ class PLMTools:
     def get_bom_by_material(
         self,
         material_code: str,
-        bom_version: str = "V1.0"
+        bom_version: Optional[str] = None
     ) -> Optional[Dict]:
-        """获取物料的BOM"""
+        """获取物料的BOM（查不到时返回 None）
+
+        说明：ENG_BOM 的元数据中没有 FBomNo / FVersion 字段，
+        BOM 编号就是 FNumber（形如 1.LE.CC.050010_V.0，版本信息包含在编号里）。
+        因此不再按 FVersion 过滤；若传入 bom_version，则按编号后缀 "_<version>" 匹配。
+        """
         try:
-            fields = "FBomId,FBomNo,FMaterialId.FNumber,FVersion,FDescription,FCreateDate"
-            filter_str = f"FMaterialId.FNumber = '{material_code}' and FVersion = '{bom_version}'"
-            
+            fields = "FBomId,FNumber,FMaterialId.FNumber,FDocumentStatus,FDescription,FCreateDate"
+
+            filters = [f"FMaterialId.FNumber = '{material_code}'"]
+            if bom_version:
+                filters.append(f"FNumber like '%_{bom_version}'")
+
             results = self.client.execute_bill_query(
                 form_id=self.form_ids.BOM,
                 field_keys=fields,
-                filter_string=filter_str,
+                filter_string=" and ".join(filters),
                 limit=1
             )
             
-            if results and len(results) > 0:
-                bom_no = results[0][1]
-                return self.client.view(self.form_ids.BOM, {"Number": bom_no})
-            return None
+            # 金蝶无匹配数据时会返回 [] / [[]] / [[None, ...]]，统一按“无 BOM”处理
+            row = None
+            for item in results or []:
+                if isinstance(item, (list, tuple)) and any(v is not None for v in item):
+                    row = item
+                    break
+            if not row:
+                return None
+            
+            bom_no = row[1] if len(row) > 1 else row[0]
+            if not bom_no:
+                return None
+            return self.client.view(self.form_ids.BOM, {"Number": bom_no})
         except KingdeeAPIError as e:
             logger.error(f"查询BOM失败: {e}")
             return None
@@ -176,11 +193,15 @@ class PLMTools:
         bom_no: str,
         parent_material_code: str,
         items: List[Dict],
-        version: str = "V1.0",
         bom_name: Optional[str] = None,
         **kwargs
     ) -> Dict:
-        """创建BOM"""
+        """创建BOM
+
+        注意：ENG_BOM 元数据中没有 FBomNo / FVersion 字段，
+        BOM 编号使用 FNumber，版本信息请直接包含在 bom_no 中
+        （例如 "1.LE.CC.050010_V.0"）。
+        """
         bom_name = bom_name or f"{parent_material_code} BOM"
         
         entries = []
@@ -199,9 +220,8 @@ class PLMTools:
             "Creator": kwargs.get("creator", self.client.username),
             "NeedUpDateFields": [],
             "Model": {
-                "FBomNo": bom_no,
+                "FNumber": bom_no,
                 "FMaterialID": {"FNumber": parent_material_code},
-                "FVersion": version,
                 "FDescription": bom_name,
                 "FEntity": entries
             }
@@ -214,7 +234,7 @@ class PLMTools:
         return self.client.save(self.form_ids.BOM, data)
     
     def batch_create_boms(self, boms: List[Dict]) -> Dict:
-        """批量创建BOM"""
+        """批量创建BOM（版本请并入 bom_no，ENG_BOM 没有 FVersion 字段）"""
         models = []
         for bom in boms:
             items = []
@@ -227,9 +247,8 @@ class PLMTools:
                 })
             
             model = {
-                "FBomNo": bom["bom_no"],
+                "FNumber": bom["bom_no"],
                 "FMaterialID": {"FNumber": bom["parent_material_code"]},
-                "FVersion": bom.get("version", "V1.0"),
                 "FDescription": bom.get("bom_name", bom["bom_no"]),
                 "FEntity": items
             }
@@ -304,29 +323,33 @@ class PLMTools:
         material_code: Optional[str] = None,
         version: str = "V1.0",
         description: Optional[str] = None,
-        chunk_size: int = 1024 * 1024
+        bill_no: Optional[str] = None
     ) -> Dict:
         """
-        上传图纸（使用附件上传接口）
-        
+        上传图纸（先走官方附件上传接口，再保存图纸单据）
+
+        注意：需要账套安装 PLM 图纸单据（PLM_DRAWING）；未安装的账套会在保存图纸时
+        报“业务对象不存在”。官方附件接口为整文件上传，不支持分片。
+
         Args:
             file_path: 文件路径
             material_code: 关联物料编码
             version: 图纸版本
-            description: 描述
-            chunk_size: 分块大小
-            
+            description: 描述（同时作为附件别名）
+            bill_no: 关联的图纸单据编号（官方附件接口要求，有则传）
+
         Returns:
             上传结果，包含附件ID
         """
         if not os.path.exists(file_path):
             raise ValueError(f"文件不存在: {file_path}")
         
-        # 先上传附件
+        # 先上传附件（官方 AttachmentUpLoad：FileName/FormId/BillNO/SendByte/IsLast）
         upload_result = self.client.upload_attachment(
             file_path=file_path,
             form_id=self.form_ids.DRAWING,
-            chunk_size=chunk_size
+            bill_no=bill_no,
+            alias_file_name=description
         )
         
         attachment_id = upload_result.get("AttachmentId")

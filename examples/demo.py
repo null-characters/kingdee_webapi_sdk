@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 """金蝶云星空 WebAPI SDK - 完整演示"""
 
+import os
+import sys
+
+# 保证以 `python examples/demo.py` 直接运行时可以导入 kingdee_sdk
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from kingdee_sdk import KingdeeClient, AuthType
-from kingdee_sdk.config import KINGDEE_CONFIG
+from kingdee_sdk.config_loader import KINGDEE_CONFIG, validate_config
 
 
 def demo_basic():
@@ -16,7 +22,7 @@ def demo_basic():
         acct_id=KINGDEE_CONFIG["acct_id"],
         username=KINGDEE_CONFIG["username"],
         password=KINGDEE_CONFIG["password"],
-        auth_type=AuthType.PASSWORD,
+        auth_type=KINGDEE_CONFIG.get("auth_type", AuthType.PASSWORD),
         debug=False
     )
     
@@ -50,7 +56,7 @@ def demo_filter():
         acct_id=KINGDEE_CONFIG["acct_id"],
         username=KINGDEE_CONFIG["username"],
         password=KINGDEE_CONFIG["password"],
-        auth_type=AuthType.PASSWORD,
+        auth_type=KINGDEE_CONFIG.get("auth_type", AuthType.PASSWORD),
         auto_login=True
     )
     
@@ -73,8 +79,11 @@ def main():
     print("金蝶云星空 WebAPI SDK 功能演示")
     print("*" * 60 + "\n")
     
-    if KINGDEE_CONFIG.get("username") == "your_username":
-        print("[!] 请先编辑 kingdee_sdk/config.py 填入正确的配置信息！")
+    missing = validate_config(KINGDEE_CONFIG)
+    if missing:
+        print(f"[!] 缺少配置项: {', '.join(missing)}")
+        print("    请设置环境变量（推荐，见 kingdee_sdk/config.example.py 顶部说明）")
+        print("    或复制 kingdee_sdk/config.example.py 为 kingdee_sdk/config.py 后填写。")
         return
     
     demo_basic()

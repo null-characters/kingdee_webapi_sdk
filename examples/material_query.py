@@ -6,10 +6,12 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# 保证以 `python examples/material_query.py` 直接运行时可以导入 kingdee_sdk
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from kingdee_sdk import KingdeeClient, AuthType
-from kingdee_sdk.config import KINGDEE_CONFIG
+from kingdee_sdk.config_loader import KINGDEE_CONFIG, validate_config
 
 
 class MaterialQuery:
@@ -21,6 +23,12 @@ class MaterialQuery:
         
     def login(self):
         """登录系统"""
+        missing = validate_config(KINGDEE_CONFIG)
+        if missing:
+            print(f"缺少配置项: {', '.join(missing)}")
+            print("请设置环境变量（推荐）或复制 kingdee_sdk/config.example.py 为 kingdee_sdk/config.py")
+            return False
+        
         try:
             print("\n正在连接金蝶系统...")
             self.client = KingdeeClient(
@@ -28,7 +36,7 @@ class MaterialQuery:
                 acct_id=KINGDEE_CONFIG["acct_id"],
                 username=KINGDEE_CONFIG["username"],
                 password=KINGDEE_CONFIG["password"],
-                auth_type=AuthType.PASSWORD
+                auth_type=KINGDEE_CONFIG.get("auth_type", AuthType.PASSWORD)
             )
             self.client.login()
             self.logged_in = True

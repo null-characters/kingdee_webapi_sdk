@@ -12,12 +12,12 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-# 添加 kingdee_sdk 到路径
-KINGDEE_SDK_PATH = '/Users/fengbing/git_prj/kingdee_webapi_sdk'
-sys.path.insert(0, KINGDEE_SDK_PATH)
+# 添加 kingdee_sdk 到路径（相对本脚本定位，不硬编码绝对路径）
+KINGDEE_SDK_PATH = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(KINGDEE_SDK_PATH))
 
-# 添加 kingdee_mcp_agent/config 到路径（获取金蝶配置）
-sys.path.insert(0, str(Path(KINGDEE_SDK_PATH) / 'kingdee_mcp_agent' / 'config'))
+# 金蝶配置统一从环境变量 / 本地配置文件读取
+from kingdee_sdk.config_loader import KINGDEE_CONFIG, validate_config
 
 # 文件路径
 MD_FILE = '/Users/fengbing/svn/trunk/software/Code/code_update/已提交项目清单.md'
@@ -91,14 +91,18 @@ def main():
     
     try:
         from kingdee_sdk import KingdeeClient, AuthType
-        from settings import KINGDEE_CONFIG
+
+        missing = validate_config(KINGDEE_CONFIG)
+        if missing:
+            print(f"   - 缺少配置项: {', '.join(missing)}")
+            return False
         
         client = KingdeeClient(
             server_url=KINGDEE_CONFIG["server_url"],
             acct_id=KINGDEE_CONFIG["acct_id"],
             username=KINGDEE_CONFIG["username"],
             password=KINGDEE_CONFIG["password"],
-            auth_type=AuthType.PASSWORD,
+            auth_type=KINGDEE_CONFIG.get("auth_type", AuthType.PASSWORD),
             auto_login=True,
             debug=False
         )
