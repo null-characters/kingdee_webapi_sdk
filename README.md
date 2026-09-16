@@ -31,6 +31,7 @@ kingdee_webapi_sdk/
 │   ├── auth.py               # 认证模块
 │   ├── exceptions.py         # 异常定义
 │   ├── plm_tools.py          # PLM 工具集
+│   ├── costing.py            # 成本核算核心（BOM 展开 + 最近采购价 → 料本/毛利）
 │   ├── config_loader.py      # 配置加载（环境变量优先）
 │   ├── config.py             # 本地覆盖配置（需自行创建，已被 .gitignore 忽略）
 │   └── config.example.py     # 配置模板
@@ -63,10 +64,19 @@ kingdee_webapi_sdk/
 │   ├── material_query.py     # 物料查询工具
 │   └── view_material_full.py # 物料详情查看
 │
-├── scripts/                  # 业务脚本
+├── scripts/                  # 业务脚本 / 只读探针
+│   ├── run_costing.py        # 按月核算并导出 Excel
+│   ├── check_costing_output.py  # 核算输出核对（重复计数/层级/缺价）
+│   ├── probe_cost_data_access.py / explore_*.py  # 只读探针（权限、字段、BOM、币别）
 │   ├── detect_acct_id.py     # ID检测工具
 │   ├── extract_submitted_items.py
 │   └── verify_material_codes.py
+│
+├── windows_tool/             # 财务用 Windows exe 小工具（详见其 README）
+│   ├── app.py                # tkinter 界面（登录自检 + 成本核算导出）
+│   ├── selfcheck.py          # 固定配置 + 登录自检逻辑
+│   ├── build.bat             # Windows 一键打包成单文件 exe
+│   └── _smoke_check.py       # 打包前四项自查
 │
 ├── tests/                    # 测试脚本
 │   ├── test_sdk_full.py
@@ -307,6 +317,14 @@ client = KingdeeClient(
 
 | 脚本 | 说明 |
 |------|------|
+| `run_costing.py` | 按月核算销售记录的料本与毛利，导出 Excel |
+| `check_costing_output.py` | 核对核算输出：重复计数 / BOM 层级 / 缺价 / 老价分布 |
+| `probe_cost_data_access.py` | 只读探测：账号权限 + 三张表单字段清单 |
+| `explore_sample_data.py` | 只读抽样导出三张表单数据到 `data/sample_export/` |
+| `explore_bom_expand.py` | 只读探测：BOM 子件拍平、层级、子件采购价 |
+| `explore_bom_query_fields.py` | 只读探测：BOM 子件字段名的正确写法 |
+| `explore_pricing_rules.py` | 只读探测：币别 / 汇率 / 外币分布 / BOM 连接率 / 最近成交价 |
+| `explore_currency.py` | 只读探测：币别清单、结算币别分布、外币折算关系 |
 | `detect_acct_id.py` | 自动检测可用的数据中心ID |
 | `extract_submitted_items.py` | 提取已提交项目清单 |
 | `verify_material_codes.py` | 子物料编码校验 |
@@ -351,6 +369,12 @@ python scripts/detect_acct_id.py
   字段不存在时接口会明确报“元数据中标识为 X 的字段不存在”，可据此校验字段名。
 - **`ENG_BOM`（BOM）**：没有 `FBomNo` / `FVersion` 字段；BOM 编号就是 `FNumber`
   （形如 `1.LE.CC.050010_V.0`，版本信息已包含在编号里），过滤条件用 `FMaterialId.FNumber`。
+- **BOM 子件字段**：分录里的子件物料是 `FMaterialIdChild.FNumber`（`FMaterialIdCoby` 不报错但值全为 `None`，表列名 `FMATERIALIDCHILD` 只回内码）；用量是 `FNumerator` / `FDenominator`，子件单位 `FChildUnitID.FNumber`。同一 BOM 编号在账套里可能有**多条重复单据**，取 `FID` 最大的那张，否则用量会翻倍。
+- **销售/采购的币别与价格**：结算币别字段是 `FSettleCurrId`（**`FCurrencyId` 不存在**；`PRE001`=人民币、`PRE007`=美元），汇率是 `FExchangeRate`；单价未税用 `FPrice`、含税用 `FTaxPrice`，人民币单价 = 原币单价 × 汇率。
+- **采购订单 `FAmount`（未税金额）实测恒为 0**，未税金额要用「单价 × 数量」自算；本位币金额用 `FAmount_LC`。单价为 0 的采购行不算成交，取价时应跳过。
+- **销售订单自带的 `FCostAmount` / `FCostPercent` 全是 0**（成本字段没值），所以成本需要自算（见 `kingdee_sdk/costing.py`）。
+- **账套里没有汇率表对象**（`BD_ExchangeRate` / `BD_EXCHANGERATE` / `BD_CurrencyRate` / `BD_ExchangeRateEntry` / `SEC_ExchangeRate` 均报「业务对象不存在」，`BD_Currency` 存在）→ 取不到「月初汇率」，只能默认用单据自带汇率或人工指定。
+- **「物料清单成本查询」不是业务对象**：多个候选标识均报「不存在」，管理员账号结果一致（已排除权限因素）；它是报表/动态表单，数据由 BOM 正向展开模型实时运算，WebAPI 取不到 → 成本由 SDK 自算。
 - **附件接口**（已用真实上传/下载闭环验证过）：
   - 上传 `AttachmentUpLoad` 参数：`FileName` / `FormId` / `InterId` / `BillNO` / `SendByte`（Base64）
     / `IsLast` / `Entrykey` / `EntryinterId` / `AliasFileName` / `FileId`；**整文件一次性上传，接口不支持分片**，
@@ -375,6 +399,24 @@ python scripts/detect_acct_id.py
   用金蝶内置管理员账号复测与普通账号结果一致。因此图纸/文档管理在本账套不可用
   （查询降级返回空列表；上传会卡在"保存图纸单据"那一步），但**通用附件接口可用**（见上一条），
   需要随单挂图纸时建议改用通用附件接口。
+
+## Windows 财务工具（exe）
+
+给财务同事用的内部小工具：`windows_tool/` —— 双击 exe → 输入自己的金蝶账号和密码 →
+「登录并自检」确认能取数 → 填结算月份 → 「开始核算并导出 Excel」（结果存到桌面）。
+
+- 用途：按财务确认的口径，把**销售订单的售价**与**BOM 展开后的采购料本**逐条比对，算出每条销售记录的料本、毛利、毛利率
+- 服务器地址、账套 ID 固定写死；密码只驻内存、不落盘、不写日志；所有操作都是只读查询
+- 核算核心在 `kingdee_sdk/costing.py`（不依赖界面，可用 `scripts/run_costing.py` 直接跑）
+- 打包与使用说明见 [`windows_tool/README.md`](./windows_tool/README.md)；交接与账套事实见 [`handoff.md`](./handoff.md)
+
+```bash
+# 命令行直接核算（不打包也能用）
+KINGDEE_PASSWORD='<口令>' /opt/anaconda3/bin/python3 scripts/run_costing.py --month 2026-09
+```
+
+**核算口径**（2026-09 与财务确认）：按月结算、每月里每条销售记录单独计算；采购价取该物料最近一次已审核成交价
+（不限时点，单价为 0 不算成交）；外币按结算币别折人民币（默认单据汇率，可整批覆盖）；未税 / 含税可切换。
 
 ## 参考文档
 

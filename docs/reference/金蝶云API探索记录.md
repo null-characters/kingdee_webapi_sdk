@@ -48,9 +48,9 @@
 
 | 表单 ID | 名称 | 主键字段 | 常用字段 |
 |---------|------|----------|----------|
-| `ENG_BOM` | 工程 BOM | `FID` | `FBillNo, FMaterialId, FVersionNo, FDocumentStatus` |
-| `ENG_BOMVERSION` | BOM 版本 | `FID` | `FVersionNo, FMaterialId` |
-| `ENG_ECO` | 工程变更单 | `FID` | `FBillNo, FChangeType, FDocumentStatus` |
+| `ENG_BOM` | 工程 BOM（物料清单） | `FID` | `FNumber`（BOM 编号，版本含在编号里，如 `1.LA.LE.001083_V.0`）、`FMaterialId.FNumber`、`FDocumentStatus`；子件用 `FMaterialIdChild.FNumber` + `FNumerator`/`FDenominator`（详见 handoff.md） |
+| ~~`ENG_BOMVERSION`~~ | ❌ 对象不存在 | — | 元数据里**没有** `FBomNo` / `FVersion` / `FBomNo`，版本信息含在 `FNumber` 里 |
+| `ENG_ECNOrder` | 工程变更单 | `FID` | `FBillNo, FChangeType, FDocumentStatus`（旧文档里的 `ENG_ECO` / `ENG_ECN` **不存在**）；变更申请单是 `ENG_ECRApply` |
 
 #### 采购管理模块
 
