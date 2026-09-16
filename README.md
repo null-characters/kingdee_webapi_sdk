@@ -362,9 +362,11 @@ python scripts/detect_acct_id.py
   - 实测闭环（2026-09 已验证）：上传到**已审核的业务单据**成功并返回 `FileId` → `BOS_Attachment`
     可查到该记录 → 下载回来 md5 与原文一致；上传到**基础资料/物料**（`BD_MATERIAL`）会被账套拒绝，
     报“当前单据状态不允许上传附件（MsgCode 11）”，属账套对该对象的管控，与参数无关。
-- **当前账套未安装 PLM 模块**：`ENG_ECO` / `ENG_ECN` / `PLM_DOC` / `PLM_DRAWING` / `PLM_PROJECT` / `PLM_TASK`
-  均不存在（`ENG_BOM` / `ENG_ROUTE` / `BOS_Attachment` 存在）。因此变更单与图纸相关功能在本账套不可用：
-  查询类会降级返回空列表，写入类会报“业务对象不存在”。
+- **当前账套未安装 PLM 模块（已排除账号权限因素）**：`ENG_ECO` / `ENG_ECN` / `PLM_DOC` /
+  `PLM_DRAWING` / `PLM_PROJECT` / `PLM_TASK` 均报「标识为 X 的业务对象不存在，或者被删除」，
+  而 `ENG_BOM` / `ENG_ROUTE` / `BOS_Attachment` 可正常访问；用金蝶内置管理员账号复测的结果与
+  普通账号完全一致（两组均只能访问上述三个对象），说明是账套未安装/未启用这些模块，而非账号权限不足。
+  因此变更单与图纸相关功能在本账套不可用：查询类会降级返回空列表，写入类会报“业务对象不存在”。
 
 ## 参考文档
 
