@@ -41,7 +41,7 @@ FIXED_CONFIG = {
 }
 
 APP_TITLE = "金蝶成本核算工具（内部）"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 # 自检项：成本核算要用到的三张表单（只读查询，不改任何数据）
 SELFCHECK_FORMS = (
