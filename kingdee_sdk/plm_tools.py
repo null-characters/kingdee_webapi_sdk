@@ -23,9 +23,10 @@ class PLMFormIds:
     BOM = "ENG_BOM"
     BOM_VERSION = "ENG_BOMVERSION"
     
-    # 变更
-    ECO = "ENG_ECO"
-    ECN = "ENG_ECN"
+    # 变更（ERP 工程数据模块；本账套实测标识为 ENG_ECNOrder / ENG_ECRApply）
+    ECO = "ENG_ECNOrder"      # 工程变更单
+    ECN = "ENG_ECNOrder"      # 工程变更单（兼容旧名）
+    ECR = "ENG_ECRApply"      # 工程变更申请单
     
     # 文档/图纸
     DOC = "PLM_DOC"
@@ -266,12 +267,13 @@ class PLMTools:
     # ==================== 变更单操作 ====================
     
     def get_pending_ecos(self, limit: int = 100) -> List[List[Any]]:
-        """获取待审批的工程变更单
+        """获取待审批的工程变更单（ENG_ECNOrder）
         
-        注意：如果账套未安装 PLM 模块，ENG_ECO 业务对象可能不存在
+        FDocumentStatus: A=创建(暂存) / B=待审核 / C=已审核
+        注意：如果账套未启用工程变更（对象不存在），返回空列表而不是报错
         """
-        fields = "FBillNo,FBillType,FCreateDate,FCreatorId.FName,FBillStatus,FDescription"
-        filter_str = "FBillStatus = 'A'"
+        fields = "FBillNo,FBillTypeID.FName,FCreateDate,FCreatorId.FName,FDocumentStatus,FDescription"
+        filter_str = "FDocumentStatus = 'B'"
         
         try:
             return self.client.execute_bill_query(
@@ -283,7 +285,7 @@ class PLMTools:
         except KingdeeAPIError as e:
             # 如果业务对象不存在，返回空列表而不是报错
             if "业务对象不存在" in str(e):
-                logger.warning(f"ENG_ECO 业务对象不存在，可能未安装 PLM 模块")
+                logger.warning(f"{self.form_ids.ECO} 业务对象不存在，可能未启用工程变更")
                 return []
             raise
     
