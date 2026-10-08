@@ -31,7 +31,8 @@ kingdee_webapi_sdk/
 │   ├── auth.py               # 认证模块
 │   ├── exceptions.py         # 异常定义
 │   ├── plm_tools.py          # PLM 工具集
-│   ├── costing.py            # 成本核算核心（BOM 展开 + 最近采购价 → 料本/毛利）
+│   ├── costing.py            # 成本核算核心（BOM 展开 + 最近采购价/手工维护价 → 料本/毛利）
+│   ├── manual_prices.py      # 缺价子件的本地采购价维护表（CSV）+ 核算快照
 │   ├── config_loader.py      # 配置加载（环境变量优先）
 │   ├── config.py             # 本地覆盖配置（需自行创建，已被 .gitignore 忽略）
 │   └── config.example.py     # 配置模板
@@ -65,18 +66,21 @@ kingdee_webapi_sdk/
 │   └── view_material_full.py # 物料详情查看
 │
 ├── scripts/                  # 业务脚本 / 只读探针
-│   ├── run_costing.py        # 按月核算并导出 Excel
-│   ├── check_costing_output.py  # 核算输出核对（重复计数/层级/缺价）
+│   ├── run_costing.py        # 按区间核算并导出 Excel（缺价未补齐不导出）
+│   ├── check_costing_output.py  # 核算输出核对（重复计数/层级/价格来源/加总一致性）
+│   ├── verify_costing_offline.py # 离线自检（假客户端，不需要内网）
 │   ├── probe_cost_data_access.py / explore_*.py  # 只读探针（权限、字段、BOM、币别）
 │   ├── detect_acct_id.py     # ID检测工具
 │   ├── extract_submitted_items.py
 │   └── verify_material_codes.py
 │
+├── 成本核算数据/              # 财务本地长期产物（维护表 CSV + 核算快照，不入库）
+│
 ├── windows_tool/             # 财务用 Windows exe 小工具（详见其 README）
-│   ├── app.py                # tkinter 界面（登录自检 + 成本核算导出）
+│   ├── app.py                # tkinter 界面（登录自检 + 区间核算 + 缺价补全）
 │   ├── selfcheck.py          # 固定配置 + 登录自检逻辑
 │   ├── build.bat             # Windows 一键打包成单文件 exe
-│   └── _smoke_check.py       # 打包前四项自查
+│   └── _smoke_check.py       # 打包前六项自查
 │
 ├── tests/                    # 测试脚本
 │   ├── test_sdk_full.py
@@ -317,8 +321,9 @@ client = KingdeeClient(
 
 | 脚本 | 说明 |
 |------|------|
-| `run_costing.py` | 按月核算销售记录的料本与毛利，导出 Excel |
-| `check_costing_output.py` | 核对核算输出：重复计数 / BOM 层级 / 缺价 / 老价分布 |
+| `run_costing.py` | 按日期区间核算销售记录的料本与毛利，导出 Excel（缺价子件未补齐不导出） |
+| `check_costing_output.py` | 核对核算输出：重复计数 / BOM 层级 / 价格来源 / 加总一致性 / 老价分布 |
+| `verify_costing_offline.py` | 离线自检：假客户端跑通「扫描→缺价→补价→重检→导出」全流程（不需要内网） |
 | `probe_cost_data_access.py` | 只读探测：账号权限 + 三张表单字段清单 |
 | `explore_sample_data.py` | 只读抽样导出三张表单数据到 `data/sample_export/` |
 | `explore_bom_expand.py` | 只读探测：BOM 子件拍平、层级、子件采购价 |
@@ -403,20 +408,33 @@ python scripts/detect_acct_id.py
 ## Windows 财务工具（exe）
 
 给财务同事用的内部小工具：`windows_tool/` —— 双击 exe → 输入自己的金蝶账号和密码 →
-「登录并自检」确认能取数 → 填结算月份 → 「开始核算并导出 Excel」（结果存到桌面）。
+「登录并自检」确认能取数 → 填**统计区间**（整月，或 5 号~15 号这种任意区间）→
+「开始核算并导出 Excel」（结果存到桌面）。
 
 - 用途：按财务确认的口径，把**销售订单的售价**与**BOM 展开后的采购料本**逐条比对，算出每条销售记录的料本、毛利、毛利率
+- **缺采购价的子件会卡住导出**：工具把缺价料号预填进本地维护表 `成本核算数据/采购价维护表.csv`，
+  财务用 Excel 在那一行填单价 → 点「重新检查」→ 全部补齐后才导出最终表格
+- 成本分三列：**自动料本（金蝶最近采购价）+ 手工维护料本（财务填的缺价子件）= 最终料本**
 - 服务器地址、账套 ID 固定写死；密码只驻内存、不落盘、不写日志；所有操作都是只读查询
-- 核算核心在 `kingdee_sdk/costing.py`（不依赖界面，可用 `scripts/run_costing.py` 直接跑）
+- 核算核心在 `kingdee_sdk/costing.py`，维护表/快照在 `kingdee_sdk/manual_prices.py`
+  （都不依赖界面，可用 `scripts/run_costing.py` 直接跑）
 - 打包与使用说明见 [`windows_tool/README.md`](./windows_tool/README.md)；交接与账套事实见 [`handoff.md`](./handoff.md)
 
 ```bash
-# 命令行直接核算（不打包也能用）
-KINGDEE_PASSWORD='<口令>' /opt/anaconda3/bin/python3 scripts/run_costing.py --month 2026-09
+PY=/opt/anaconda3/bin/python3
+# 离线自检：不需要内网，验证整条链路（含缺价补全与加总一致性）
+$PY scripts/verify_costing_offline.py
+
+# 命令行直接核算（整月 / 任意区间）
+KINGDEE_PASSWORD='<口令>' $PY scripts/run_costing.py --month 2026-09
+KINGDEE_PASSWORD='<口令>' $PY scripts/run_costing.py --from 2026-09-05 --to 2026-09-15
+# 缺价未补齐时不导出（退出码 2）；财务填好维护表后用快照秒级重算
+$PY scripts/run_costing.py --recheck
 ```
 
-**核算口径**（2026-09 与财务确认）：按月结算、每月里每条销售记录单独计算；采购价取该物料最近一次已审核成交价
-（不限时点，单价为 0 不算成交）；外币按结算币别折人民币（默认单据汇率，可整批覆盖）；未税 / 含税可切换。
+**核算口径**（2026-09 与财务确认）：按日期区间结算、区间内每条销售记录单独计算；采购价取该物料最近一次已审核成交价
+（不限时点，单价为 0 不算成交）；外币按结算币别折人民币（默认单据汇率，可整批覆盖）；未税 / 含税可切换；
+**金蝶取不到价的子件用手工维护价补位**（金蝶价优先，手工价只在缺价时生效并单独成列）。
 
 ## 参考文档
 

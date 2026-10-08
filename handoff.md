@@ -1,6 +1,19 @@
 # 交接说明（金蝶云星空 WebAPI SDK + 成本核算工具）
 
-> 更新时间：2026-09 · 当前状态：**成本核算功能已实现并验证；Windows exe 已在 Windows 机器上打包成功，已交财务试用，等待反馈。**
+> 更新时间：2026-09 · 当前状态：**成本核算 v0.3.0 已实现并验证（任意区间 + 缺价子件手工维护表 + 导出卡口）；
+> exe 需要重新打包（Mac 无法交叉编译，必须在 Windows 上跑 `windows_tool/build.bat`）。**
+
+## 0. 财务反馈的三条需求的落地情况（v0.3.0）
+
+| 财务反馈 | 落地方式 | 位置 |
+|---|---|---|
+| ① 能不能按时间区间统计（如本月 5 号到 15 号） | 界面改成「统计区间：起始 ~ 结束」（默认本月 1 号~月末，有「本月/上月」快填）；命令行 `--from/--to`；Excel 新增「**区间汇总**」工作表（按产品汇总，末行合计） | `costing.py: normalize_range/range_label/summarize_by_product`、`app.py: _build_costing_area` |
+| ② 缺采购价子件先由财务维护，且维护表要长期存本地（CSV） | 扫描出的缺价料号**自动预填**进 `成本核算数据/采购价维护表.csv`（单价列留空），财务用 Excel 在那一行直接填；再核算自动套用 | `manual_prices.py`（整表 + 定位 + 容错）、`costing.py: expand()` |
+| ③ 手工维护的成本要单列，与自动算出的成本叠加为最终成本 | 成本分三列：`自动料本(人民币)`（金蝶价）+ `手工维护料本(人民币)`（维护表价）= `最终料本(人民币)`；单件成本同样三列；明细有「价格来源」列 | `costing.py: _finalize()` |
+
+**导出卡口（用户明确的流程）**：扫描 → 发现缺价就把料号预填进 CSV 并弹窗提示 → **补齐之前不导出最终表格**；
+点「重新检查」用**本地快照**重算（不重新登录金蝶，秒级）；全部补齐后导出。
+留了一个显式出口：「仍有缺价也导出（按 0 计）」（命令行 `--allow-missing`），Excel 里会标注。
 
 ## 1. 仓库与环境
 
@@ -34,15 +47,33 @@ KINGDEE_PASSWORD='<口令>' $PY scripts/probe_cost_data_access.py
 # 抽样导出（销售订单 / 物料清单 / 采购订单）→ data/sample_export/
 KINGDEE_PASSWORD='<口令>' $PY scripts/explore_sample_data.py
 
-# 按月核算并导出 Excel（命令行）
+# 按区间核算并导出 Excel（命令行；缺价未补齐不导出，退出码 2）
 KINGDEE_PASSWORD='<口令>' $PY scripts/run_costing.py --month 2026-09 [--tax 含税] [--rate 6.7809]
+KINGDEE_PASSWORD='<口令>' $PY scripts/run_costing.py --from 2026-09-05 --to 2026-09-15
+# 财务填好维护表后：不登录金蝶，用上次快照 + 最新维护表重算并导出
+$PY scripts/run_costing.py --recheck
+# 仍有缺价也导出（按 0 计并标注）
+KINGDEE_PASSWORD='<口令>' $PY scripts/run_costing.py --month 2026-09 --allow-missing
 
-# 核对核算输出（重复计数 / 层级 / 缺价 / 老价）
+# 离线自检（假客户端，不需要内网/口令）——改核算逻辑后必跑
+$PY scripts/verify_costing_offline.py
+
+# 核对核算输出（重复计数 / 层级 / 价格来源 / 加总一致性 / 老价）
 $PY scripts/check_costing_output.py
 
-# Windows 工具（源码环境）
+# Windows 工具（源码环境；六项自查含离线逻辑与缺价对话框）
 cd windows_tool && KINGDEE_PASSWORD='<口令>' $PY _smoke_check.py --month 2026-09
 ```
+
+### 1.3 本地长期产物（v0.3.0 新增）
+
+| 文件 | 内容 |
+|---|---|
+| `成本核算数据/采购价维护表.csv` | 缺采购价子件的**手工维护价**（财务填）。utf-8-sig，Excel 双击不乱码；子件编码为唯一键 |
+| `成本核算数据/上次核算快照.json.gz` | 上次取数的原始记录，供「套用维护表重新计算」用（不用重新登录金蝶） |
+
+目录选址优先级：`KINGDEE_COSTING_DATA_DIR` 环境变量 > exe 所在目录/仓库根的 `成本核算数据/` > `~/金蝶成本核算/`
+（优先复用**已有**维护表的目录）。两个文件都已在 `.gitignore` 里（含真实采购价，不入库）。
 
 ## 2. 已完成的工作
 
@@ -52,25 +83,57 @@ cd windows_tool && KINGDEE_PASSWORD='<口令>' $PY _smoke_check.py --month 2026-
 - `kingdee_mcp_agent/`：MCP Server（24 个工具）+ 客户端 + Agent。
 - `kingdee_sdk/config_loader.py`：环境变量优先的统一配置加载。
 
-### 2.2 成本核算（本次新增，已推送）
+### 2.2 成本核算（v0.2.0 已推送）
 
 | 提交 | 内容 |
 |---|---|
 | `eb973f9` | 取数探测脚本：币别 / 汇率 / 最近采购价 / BOM 连接率 |
 | `becf9d1` | 成本核算功能：按月逐条算料本与毛利并导出 Excel + Windows 界面接上核算 |
 
-- `kingdee_sdk/costing.py`：核算核心（`CostingCalculator` / `export_xlsx` / `month_range`）。
-- `scripts/run_costing.py`：命令行核算入口。
-- `scripts/check_costing_output.py`：输出核对（按「销售单号+产品」查重复计数、BOM 层级、缺价、老价分布）。
-- `windows_tool/`：财务用的小工具（tkinter 界面 + PyInstaller 单文件 exe）。
+### 2.2b 财务反馈后的 v0.3.0（本次新增）
 
-### 2.3 验证状态（实测）
+- `kingdee_sdk/manual_prices.py`（**新文件**）：缺价子件的手工维护价表（CSV，长期产物）+
+  数据目录选址 + 快照路径；含表头别名容错、GBK 兼容、重复料号告警、写不进去时的友好报错。
+- `kingdee_sdk/costing.py`（**重写**）：
+  - `CostingRun` 数据类（`meta/records/summary/details/missing/stale/children`），`complete` 即「缺价是否补齐」；
+  - `_finalize()` 是 run 与重算共用的汇总函数，保证两种路径列一致；
+  - 任意区间（`normalize_range/parse_date_text/range_label/month_bounds`）；
+  - 缺价子件按维护表补位（**金蝶价优先**），自动/手工/最终三列成本；
+  - `summarize_by_product()` 区间汇总（末行合计）；
+  - 快照 `save_snapshot/load_snapshot` + `recalculate()` + `check_recalc_compatible()`（口径变更拦截）；
+  - `export_xlsx()` 六个工作表（逐条核算 / 区间汇总 / 子件价格总览 / 子件明细 / 缺价待维护 / 说明）
+    + 数字格式 + 冻结表头 + 筛选。
+- `scripts/run_costing.py`：`--from/--to`、`--manual-table`、`--recheck`、`--allow-missing`、
+  `--list-missing`；**缺价未补齐不导出（退出码 2）**。
+- `scripts/check_costing_output.py`：改看「价格来源」列，新增加总一致性核对与区间汇总打印（兼容旧文件）。
+- `scripts/verify_costing_offline.py`（**新文件**）：**假客户端离线自检 103 项**，不需要内网/口令。
+- `windows_tool/app.py`：区间输入 + 本月/上月快填 + 维护表路径与「打开维护表」+
+  **`MissingPriceDialog` 缺价补全对话框**（列出缺价料号、重新检查、强制导出）+
+  「套用维护表重新导出（不用登录）」；版本 `0.3.0`。
+- `windows_tool/_smoke_check.py`：四项 → **六项**（多出：缺价对话框构建、离线逻辑自检）。
+
+### 2.3 验证状态
+
+**v0.3.0 本次验证（可复现，不需要内网）**
+
+- `scripts/verify_costing_offline.py`：**103/103 项全部通过** ✅
+  覆盖：区间取数（整月 / 5~15 号 / 区间外记录被排除）、缺价扫描、料号预填 CSV（表头顺序、单价留空、utf-8-sig BOM、
+  不覆盖已填价）、填价后重算（自动+手工=最终）、补齐前 `complete=False`（导出被卡）、部分补齐仍被卡、
+  快照存取与重算一致、口径变更拦截、导出 6 个工作表（含子件价格总览与区间汇总合计）、
+  维护表容错（GBK/别名/重复/占用）、含税口径。
+- `windows_tool/_smoke_check.py`：`[1/6]` 语法 + `[2/6]` 主界面构建 + `[3/6]` 缺价对话框构建
+  + `[4/6]` 离线逻辑自检 **全部通过**（`[5/6]`/`[6/6]` 需要口令与内网，已跳过）。
+
+**v0.2.0 当时的历史验证（真账套实测，仍有效）**
 
 - 只读抽样：销售订单 50 行 / 采购订单 20 行 / BOM（含 18 行子件、54 行查询展开）落盘成功。
 - 核算试算：2026-09 前 6 条销售记录跑通，合计销售额 218,105.39 / 料本 131,523.06 / 毛利 86,582.33（毛利率 39.7%）；美元单折算正确（原币 17.00 × 6.7809 = 115.2753）。
 - 输出核对：按「销售单号+产品」分组后**完全重复行 0**；BOM 层级 L1~L4。
-- Windows 工具四项冒烟：`[1/4] 语法检查` + `[2/4] GUI 构建` + `[3/4] 登录自检` + `[4/4] 核算验证` **全部通过**。
-- ✅ **exe 已在 Windows 机器上打包成功并交给财务试用**（Mac 无法交叉生成 Windows exe，这一步只能由 Windows 完成）。
+- ✅ exe 曾在 Windows 上打包成功并交财务试用（**v0.3.0 需要重新打包**）。
+
+> ⚠️ v0.3.0 的**真账套**验证还没做：本次只做了离线自检与界面构建验证（开发环境是 Mac，无法访问
+> `192.168.0.200`，也没有口令）。请在 Windows 上打包含 `--month` 跑一次 `_smoke_check.py` 的 `[5/6]`/`[6/6]`，
+> 并把真账套的缺价子件清单给财务过一遍。
 
 ## 3. 账套事实（实测，2026-09）
 
@@ -106,35 +169,44 @@ cd windows_tool && KINGDEE_PASSWORD='<口令>' $PY _smoke_check.py --month 2026-
 - 销售物料的 BOM 覆盖率：抽查 30 个销售物料，**29 个有 BOM**（例外的如 `3.D.W01.001190 磁控开关输出线`）。
 - 叶子件采购价新旧：633 行叶子件里 6 行用的是 2025 年的价（最老 2025-04-28）。
 
-## 4. 成本核算口径（与财务确认，2026-09）
+## 4. 成本核算口径（与财务确认，2026-09 / v0.3.0 增补）
 
 | 项 | 口径 | 实现位置 |
 |---|---|---|
-| 结算方式 | 按月结算，每月里**每一条销售记录单独计算** | `CostingCalculator.run(date_from, date_to)` |
+| 结算方式 | 按**日期区间**结算（整月或 5 号~15 号等任意区间），区间内**每一条销售记录单独计算** | `normalize_range()` + `CostingCalculator.run()` |
 | 销售取价 | 销售订单的「单价」列（未税 `FPrice` / 含税 `FTaxPrice`，界面可切） | `tax_mode` |
 | 采购取价 | 该物料**最近一次成交价**（最新一条已审核采购行，**不限时点**；单价为 0 不算成交） | `latest_purchase()` |
 | 外币处理 | 按结算币别折人民币，**默认用单据自带汇率**，界面可填「覆盖汇率」整批指定 | `rate_of()` |
-| 成本口径 | 销售产品的 BOM 递归展开到「没有 BOM 的叶子件」，叶子件用量 × 最近采购价汇总 | `expand()` / `cost_of()` |
+| 成本口径 | 销售产品的 BOM 递归展开到「没有 BOM 的叶子件」，叶子件用量 × 单价汇总 | `expand()` / `cost_of()` |
+| 缺价子件 | 金蝶取不到价 → 查本地维护表（CSV）；**金蝶价优先**，手工价只在缺价时生效 | `manual_prices.ManualPriceTable.lookup()` |
+| 成本分列 | `自动料本（金蝶） + 手工维护料本（手工填的） = 最终料本`；单件成本同样三列；毛利 = 销售额 − **最终**料本 | `_finalize()` |
+| 导出卡口 | `CostingRun.complete`（即 `missing` 为空）才允许导出；命令行 `--allow-missing` 可强制导出并标注 | `app.export_job` / `run_costing.py` |
+| 重算 | 补价后用本地快照重算，**不重新登录金蝶**；计价方式/覆盖汇率变了则拒绝套用 | `recalculate()` / `check_recalc_compatible()` |
 
 ### 已知限制（按现有口径有意为之）
 
 1. 采购价不限时点 → 可能用到很久以前的老价（实测 6/633 行是 2025 年的价）。
-2. 叶子件按「没有 BOM 就算采购件」；自制件若没维护 BOM，会被当成采购件（无采购价则按 0 计并在「备注」标注）。
+2. 叶子件按「没有 BOM 就算采购件」；自制件若没维护 BOM，会被当成采购件
+   → 它也会进缺价清单，需要财务给个估价（或强制导出按 0 计并标注）。
 3. 「当月初汇率」无数据源 → 默认下单日汇率，需要月初汇率时用界面「覆盖汇率」。
 4. 未处理**单位换算**（BOM 用量单位与采购单位不同时会有偏差），明细里有「单位」列供人工核对。
+5. 维护表是 CSV 且**工具会写它**（只在扫描时追加缺价料号）：财务用 Excel 编辑时若 Excel 占着文件，
+   写入会失败——已捕获并给出「请先关闭 Excel」的提示，不影响核算结果。
+6. 维护表「币别」列填外币时，必须同时填「汇率」列（否则按 1.0 折算，只是不报错）。
 
 ## 5. Windows 工具（windows_tool/）
 
 | 文件 | 作用 |
 |---|---|
-| `app.py` | tkinter 界面：登录自检 + 「结算月份 / 未税-含税 / 覆盖汇率 / 开始核算并导出 Excel」；结果导出到桌面 |
-| `selfcheck.py` | 固定配置（服务器 / 账套写死）+ 登录自检逻辑；命令行 `--check` |
+| `app.py` | tkinter 界面：登录自检 + 「统计区间（起始~结束，本月/上月快填）/ 未税-含税 / 覆盖汇率 / 开始核算并导出 Excel」；维护表路径 + 「打开维护表 / 打开所在文件夹」；「套用维护表重新导出（不用登录）」；**`MissingPriceDialog`**：缺价子件清单（料号/名称/单位/出现次数/涉及产品数/说明）+「显示全部子件」开关（看全部子件的价格来源）+「重新检查」+「仍有缺价也导出」 |
+| `selfcheck.py` | 固定配置（服务器 / 账套写死）+ 登录自检逻辑；命令行 `--check`；`APP_VERSION = 0.3.0` |
 | `build.bat` | Windows 一键打包（`--onefile --noconsole --paths ".." --collect-submodules kingdee_sdk`） |
-| `_smoke_check.py` | 打包前四项自查（语法 / 界面 / 登录 / 核算） |
+| `_smoke_check.py` | 打包前**六项**自查（语法 / 主界面 / 缺价对话框 / 离线逻辑 / 登录 / 核算） |
 | `requirements.txt` | `requests`、`openpyxl` |
-| `README.md` | 打包步骤、财务使用步骤、常见问题、改动指引 |
+| `README.md` | 打包步骤、财务使用步骤（含缺价补价流程）、常见问题、改动指引 |
 
-安全约定：密码只驻内存、不落盘、不写日志；所有操作都是**只读查询**。
+安全约定：密码只驻内存、不落盘、不写日志；所有对金蝶的操作都是**只读查询**
+（唯一写盘的是本地维护表 CSV 与快照，都在 `成本核算数据/` 下，已 gitignore）。
 
 ## 6. 脚本清单（scripts/）
 
@@ -146,22 +218,32 @@ cd windows_tool && KINGDEE_PASSWORD='<口令>' $PY _smoke_check.py --month 2026-
 | `explore_bom_query_fields.py` | 定位 BOM 子件字段名的正确写法 |
 | `explore_pricing_rules.py` | 币别 / 汇率 / 外币分布 / BOM 连接率 / 最近成交价取法 |
 | `explore_currency.py` | 币别清单、结算币别分布、外币折算关系 |
-| `run_costing.py` | 命令行核算 + 导出 Excel |
-| `check_costing_output.py` | 核算输出核对 |
+| `run_costing.py` | 命令行核算 + 导出 Excel（缺价未补齐不导出，退出码 2；支持 `--recheck`/`--allow-missing`） |
+| `verify_costing_offline.py` | **离线自检**（假客户端，103 项，不需要内网）——改核算逻辑后必跑 |
+| `check_costing_output.py` | 核算输出核对（重复计数 / 层级 / 价格来源 / 加总一致性 / 老价） |
 | `detect_acct_id.py` / `verify_material_codes.py` / `extract_submitted_items.py` | 更早的辅助脚本 |
 
-以上除 `run_costing.py` 外都是**只读**探测/核对。
+以上只有 `run_costing.py` 会写文件（Excel / 维护表 / 快照），其余都是**只读**探测/核对。
+`verify_costing_offline.py` 只写自己的临时目录。
 
 ## 7. 待办 / 可选后续
 
-1. **等财务反馈**（当前最重要）：数字口径是否认可，特别是负毛利的记录、缺价子件、以及「老价」是否需要改成"近 N 个月内的最近价"。
-2. 若财务要严格按**月初汇率**：需要在工具里加「月初汇率表」的维护入口（CSV 导入或手工填），目前只有单值覆盖。
-3. **单位换算**：BOM 用量单位与采购单位不一致时，料本会有偏差；需要时接 `BD_UNITCONVERT`（换算率）。
+1. **在 Windows 上重新打包 v0.3.0 并跑真账套验证**（当前最重要）：
+   `build.bat` → `_smoke_check.py --month 2026-09 --limit 3`（要看 `[5/6]`/`[6/6]`），
+   然后把真账套扫出来的缺价清单给财务过一遍，确认「补价后才能导出」的流程用着顺手。
+2. **等财务对 v0.3.0 的反馈**：区间粒度是否够用、「老价」是否要改成"近 N 个月内的最近价"、
+   手工维护价是否需要「生效日期 / 失效日期」控制（目前填了就一直生效）。
+3. 若财务要严格按**月初汇率**：需要在工具里加「月初汇率表」的维护入口（CSV 导入或手工填），目前只有单值覆盖。
+4. **单位换算**：BOM 用量单位与采购单位不一致时，料本会有偏差；需要时接 `BD_UNITCONVERT`（换算率）。
+5. 「缺价子件」在界面里目前是**只读清单 + 让财务改 CSV**（按用户要求：料号预填进 CSV、在那一行填价）。
+   如果财务更希望在界面里直接填，可以给 `MissingPriceDialog` 的 Treeview 加就地编辑并回写 CSV。
 4. `docs/reference/金蝶云API探索记录.md` 是较早的探索记录，字段信息以**本文件（handoff.md）**为准（已修正工程数据模块的过时字段，其余章节若有疑问先核对账套）。
 5. `tests/test_sdk_full.py`、`tests/test_sdk_functions.py` 是**可执行脚本**而非 pytest 用例（`python3 -m unittest discover -s tests` 得到 `Ran 0 tests`），可改造成 pytest，写操作用例默认 skip。
 6. `examples/example.py` 的 `demo_custom_query` 把 SQL 传给 `execute_bill_query`（该接口要 `form_id` + `field_keys`），属既有缺陷。
 7. 账套里遗留 2 条测试附件记录（附件内码 `2170523`、`2170536`，都挂在采购订单 `WW2551` 上），需要时人工删除。
 8. 若要启用 PLM 图纸/文档管理，需由金蝶实施安装/启用对应模块。
+9. v0.3.0 新增的核算自检脚本是 `scripts/verify_costing_offline.py`（假客户端）；
+   `tests/` 下没有成本核算用例，**改 `costing.py` / `manual_prices.py` 后请先跑它**。
 
 ## 8. 工具环境注意事项（省时间）
 
